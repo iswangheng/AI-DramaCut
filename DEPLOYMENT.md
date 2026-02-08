@@ -86,7 +86,41 @@ sudo yum install -y ffmpeg
 ffmpeg -version
 ```
 
-#### 1.4 安装 PM2（进程管理器）
+#### 1.4 安装 Redis（任务队列必需）
+
+```bash
+# Ubuntu/Debian
+sudo apt install -y redis-server
+
+# 启动 Redis 服务
+sudo systemctl start redis
+
+# 设置开机自启
+sudo systemctl enable redis
+
+# 验证安装
+redis-cli ping
+# 应该返回: PONG
+```
+
+**配置 Redis**（可选）：
+
+```bash
+# 编辑 Redis 配置
+sudo nano /etc/redis/redis.conf
+
+# 推荐配置（生产环境）：
+# maxmemory 2gb
+# maxmemory-policy allkeys-lru
+# save 900 1
+# save 300 10
+# save 60 10000
+
+# 重启 Redis
+sudo systemctl restart redis
+```
+
+#### 1.5 安装 PM2（进程管理器）
 ```bash
 sudo npm install -g pm2
 
@@ -94,7 +128,7 @@ sudo npm install -g pm2
 pm2 --version
 ```
 
-#### 1.5 配置防火墙
+#### 1.6 配置防火墙
 ```bash
 # 允许 HTTP
 sudo ufw allow 80/tcp
@@ -104,6 +138,9 @@ sudo ufw allow 443/tcp
 
 # 允许自定义端口（如 3000）
 sudo ufw allow 3000/tcp
+
+# 允许 Redis（仅本地访问）
+sudo ufw allow from 127.0.0.1 to any port 6379/tcp
 
 # 启用防火墙
 sudo ufw enable
@@ -150,6 +187,19 @@ npm run build
 
 # 验证构建
 ls -la .next/
+```
+
+#### 2.5 初始化数据库
+
+```bash
+# 创建数据目录
+mkdir -p data uploads outputs logs
+
+# 初始化数据库
+npm run db:init
+
+# 验证数据库
+ls -la .data/local.db
 ```
 
 ---
@@ -389,7 +439,24 @@ YUNWU_API_ENDPOINT=
 
 ## 常见问题
 
-### 1. 端口被占用
+### 1. Redis 未运行
+
+```bash
+# 检查 Redis 状态
+sudo systemctl status redis
+
+# 启动 Redis
+sudo systemctl start redis
+
+# 设置开机自启
+sudo systemctl enable redis
+
+# 验证
+redis-cli ping
+# 应该返回: PONG
+```
+
+### 2. 端口被占用
 ```bash
 # 查看端口占用
 sudo lsof -i :3000
@@ -479,24 +546,43 @@ pm2 monit
 
 ```javascript
 module.exports = {
-  apps: [{
-    name: 'dramagen-ai',
-    script: 'npm',
-    args: 'start',
-    cwd: '/var/www/AI-DramaCut',
-    instances: 1,
-    exec_mode: 'fork',
-    autorestart: true,
-    watch: false,
-    max_memory_restart: '2G',
-    env: {
-      NODE_ENV: 'production',
-      PORT: 3000
+  apps: [
+    {
+      name: 'dramagen-ai',
+      script: 'npm',
+      args: 'start',
+      cwd: '/var/www/AI-DramaCut',
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '2G',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 3000
+      },
+      error_file: '/var/www/AI-DramaCut/logs/pm2-error.log',
+      out_file: '/var/www/AI-DramaCut/logs/pm2-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z'
     },
-    error_file: '/var/www/AI-DramaCut/logs/pm2-error.log',
-    out_file: '/var/www/AI-DramaCut/logs/pm2-out.log',
-    log_date_format: 'YYYY-MM-DD HH:mm:ss Z'
-  }]
+    {
+      name: 'dramagen-worker',
+      script: 'npx',
+      args: 'tsx scripts/workers.ts',
+      cwd: '/var/www/AI-DramaCut',
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '1G',
+      env: {
+        NODE_ENV: 'production'
+      },
+      error_file: '/var/www/AI-DramaCut/logs/worker-error.log',
+      out_file: '/var/www/AI-DramaCut/logs/worker-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z'
+    }
+  ]
 };
 ```
 
