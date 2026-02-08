@@ -5,6 +5,7 @@
 
 import { elevenlabsConfig } from '../config';
 import { withRetry, type RetryOptions } from './utils/retry';
+import { alignWordsSmart } from './utils/alignment';
 
 // ============================================
 // 类型定义
@@ -250,12 +251,30 @@ export class ElevenLabsClient {
     outputFormat: string,
     stability: number,
     similarityBoost: number,
-    controller?: AbortController
-  ): Promise<{ audioBuffer: Buffer; format: string }> {
+    controller?: AbortController,
+    includeTimestamps: boolean = true
+  ): Promise<{ audioBuffer: Buffer; format: string; alignment?: any }> {
     // 构建 URL
     const url = new URL(`${this.endpoint}/text-to-speech/${voiceId}`);
     if (outputFormat) {
       url.searchParams.append('output_format', outputFormat);
+    }
+
+    // 构建请求体
+    const requestBody: any = {
+      text,
+      model_id: modelId,
+      voice_settings: {
+        stability,
+        similarity_boost: similarityBoost,
+      },
+    };
+
+    // 尝试启用 timestamps（ElevenLabs 可能需要特殊参数）
+    if (includeTimestamps) {
+      // ElevenLabs 可能的参数（需要根据实际 API 文档调整）
+      // requestBody.return_timestamps = true;
+      // requestBody.prosody = { alignment: true };
     }
 
     // 发送 TTS 请求
@@ -265,14 +284,7 @@ export class ElevenLabsClient {
         'Content-Type': 'application/json',
         'xi-api-key': this.apiKey,
       },
-      body: JSON.stringify({
-        text,
-        model_id: modelId,
-        voice_settings: {
-          stability,
-          similarity_boost: similarityBoost,
-        },
-      }),
+      body: JSON.stringify(requestBody),
       signal: controller?.signal,
     });
 
@@ -283,6 +295,17 @@ export class ElevenLabsClient {
       throw error;
     }
 
+    // 尝试从响应头获取 alignment 信息
+    let alignment;
+    const alignmentHeader = response.headers.get('X-ElevenLabs-Alignment');
+    if (alignmentHeader) {
+      try {
+        alignment = JSON.parse(alignmentHeader);
+      } catch (e) {
+        // 忽略解析错误
+      }
+    }
+
     // 获取音频二进制数据
     const arrayBuffer = await response.arrayBuffer();
     const audioBuffer = Buffer.from(arrayBuffer);
@@ -290,7 +313,7 @@ export class ElevenLabsClient {
     // 解析音频格式
     const format = this.parseAudioFormat(outputFormat);
 
-    return { audioBuffer, format };
+    return { audioBuffer, format, alignment };
   }
 
   /**
@@ -337,7 +360,8 @@ export class ElevenLabsClient {
             outputFormat,
             stability,
             similarityBoost,
-            controller
+            controller,
+            true // 尝试获取 timestamps
           );
         },
         this.retryOptions
@@ -547,16 +571,22 @@ export class ElevenLabsClient {
         durationMs = Math.round((wordCount / estimatedWordsPerSecond) * 1000);
       }
 
-      // 6. 提取 wordTimings（如果有）
-      // ElevenLabs API 在 response headers 中返回 word timings
-      // 需要使用特殊的 API 端点
+      // 6. 提取 wordTimings
+      // 优先尝试从 API 获取真实的 timestamps
+      // 如果不可用，则使用智能对齐算法
 
-      // TODO: 实现 wordTimings 提取
-      // 当前使用文本分割作为临时方案
-      const wordTimings: import('../types/api-contracts').Word[] = this.extractWordTimingsFromText(
-        text,
-        durationMs
-      );
+      let wordTimings: import('../types/api-contracts').Word[];
+
+      // TODO: 如果 ElevenLabs 返回了 alignment 数据，优先使用
+      // if (result.alignment && result.alignment.chars) {
+      //   wordTimings = this.parseElevenLabsAlignment(result.alignment, text);
+      // } else {
+      //   // 使用智能对齐算法
+      //   wordTimings = alignWordsSmart(text, durationMs);
+      // }
+
+      // 当前使用智能对齐算法（改进版）
+      wordTimings = this.extractWordTimingsFromText(text, durationMs, true);
 
       const format = this.parseAudioFormat(elevenlabsConfig.outputFormat);
 
@@ -584,14 +614,25 @@ export class ElevenLabsClient {
   }
 
   /**
-   * 从文本提取 wordTimings（临时方案）
-   * 等待 ElevenLabs API 的完整 wordTimings 支持
+   * 从文本提取 wordTimings（改进版）
+   *
+   * @param text 文本内容
+   * @param totalDurationMs 总时长（毫秒）
+   * @param useSmartAlignment 是否使用智能对齐算法（默认 false 以保持向后兼容）
+   * @returns Word[] 词时间戳数组
    */
   private extractWordTimingsFromText(
     text: string,
-    totalDurationMs: number
+    totalDurationMs: number,
+    useSmartAlignment: boolean = false
   ): import('../types/api-contracts').Word[] {
-    const words = text.split(/\s+/);
+    if (useSmartAlignment) {
+      // 使用智能对齐算法（基于音节和标点符号）
+      return alignWordsSmart(text, totalDurationMs);
+    }
+
+    // 简单平均分割（保持向后兼容）
+    const words = text.split(/\s+/).filter(w => w.length > 0);
     const msPerWord = totalDurationMs / words.length;
 
     return words.map((word, index) => {
@@ -605,6 +646,19 @@ export class ElevenLabsClient {
         timestampMs: startMs,
       };
     });
+  }
+
+  /**
+   * 解析 ElevenLabs API 返回的 alignment 数据
+   * （预留方法，等待 API 支持）
+   */
+  private parseElevenLabsAlignment(
+    alignment: any,
+    text: string
+  ): import('../types/api-contracts').Word[] {
+    // TODO: 实现 ElevenLabs alignment 数据解析
+    // 这取决于 API 实际返回的数据格式
+    return [];
   }
 }
 
