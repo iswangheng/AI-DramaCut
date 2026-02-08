@@ -17,7 +17,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Search, MoreVertical, Edit, Trash2, Eye } from "lucide-react";
-import { projectsApi, type ProjectWithStats } from "@/lib/api";
+import type { Project } from "@/lib/db/schema";
+
+// 扩展 Project 类型，添加统计信息
+interface ProjectWithStats extends Project {
+  videoCount: number;
+  totalDuration: string;
+}
+
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  message?: string;
+}
 
 function ProjectsContent() {
   const router = useRouter();
