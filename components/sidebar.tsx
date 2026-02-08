@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { ChevronDown, FolderOpen, Scissors, Mic, ListTodo, Settings } from "lucide-react";
 
 interface NavItem {
@@ -8,27 +8,35 @@ interface NavItem {
   label: string;
   icon: React.ReactNode;
   section?: string;
+  path: string;
 }
 
 const navItems: NavItem[] = [
-  { id: "projects", label: "素材管理", icon: <FolderOpen className="w-5 h-5" />, section: "work" },
-  { id: "highlight", label: "高光切片模式", icon: <Scissors className="w-5 h-5" />, section: "work" },
-  { id: "recap", label: "深度解说模式", icon: <Mic className="w-5 h-5" />, section: "work" },
-  { id: "tasks", label: "任务管理", icon: <ListTodo className="w-5 h-5" />, section: "system" },
+  { id: "projects", label: "素材管理", icon: <FolderOpen className="w-5 h-5" />, section: "work", path: "/projects" },
+  { id: "highlight", label: "高光切片模式", icon: <Scissors className="w-5 h-5" />, section: "work", path: "/highlight" },
+  { id: "recap", label: "深度解说模式", icon: <Mic className="w-5 h-5" />, section: "work", path: "/recap" },
+  { id: "tasks", label: "任务管理", icon: <ListTodo className="w-5 h-5" />, section: "system", path: "/tasks" },
 ];
 
 interface SidebarProps {
-  currentPath?: string;
-  onNavigate?: (path: string) => void;
   currentProject?: string;
 }
 
-export function Sidebar({ currentPath = "projects", onNavigate, currentProject = "霸道总裁爱上我 第3集" }: SidebarProps) {
-  const [activeItem, setActiveItem] = useState(currentPath);
+export function Sidebar({ currentProject = "霸道总裁爱上我 第3集" }: SidebarProps) {
+  const router = useRouter();
+  const pathname = usePathname();
 
-  const handleNavClick = (itemId: string) => {
-    setActiveItem(itemId);
-    onNavigate?.(itemId);
+  // 从 pathname 提取当前活跃的导航项
+  const getActiveItemId = () => {
+    const path = pathname || "/";
+    const item = navItems.find(item => path.startsWith(item.path));
+    return item?.id || "projects";
+  };
+
+  const activeItem = getActiveItemId();
+
+  const handleNavClick = (item: NavItem) => {
+    router.push(item.path);
   };
 
   return (
@@ -64,7 +72,7 @@ export function Sidebar({ currentPath = "projects", onNavigate, currentProject =
           .map((item) => (
             <div
               key={item.id}
-              onClick={() => handleNavClick(item.id)}
+              onClick={() => handleNavClick(item)}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-base mb-0.5 ${
                 activeItem === item.id
                   ? "bg-primary/10 text-primary-foreground"
@@ -84,7 +92,7 @@ export function Sidebar({ currentPath = "projects", onNavigate, currentProject =
           .map((item) => (
             <div
               key={item.id}
-              onClick={() => handleNavClick(item.id)}
+              onClick={() => handleNavClick(item)}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-base mb-0.5 ${
                 activeItem === item.id
                   ? "bg-primary/10 text-primary-foreground"

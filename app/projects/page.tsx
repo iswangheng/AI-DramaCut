@@ -101,7 +101,7 @@ function ProjectsContent() {
 
 export default function ProjectsPage() {
   return (
-    <MainLayout currentPath="projects">
+    <MainLayout>
       <ProjectsContent />
     </MainLayout>
   );

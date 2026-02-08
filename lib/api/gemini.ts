@@ -103,7 +103,7 @@ export class GeminiClient {
     }
 
     this.apiKey = geminiConfig.apiKey;
-    this.endpoint = geminiConfig.endpoint || 'https://generativelanguage.googleapis.com/v1beta';
+    this.endpoint = geminiConfig.endpoint || 'https://generativelanguage.googleapis.com';
     this.model = geminiConfig.model;
     this.temperature = geminiConfig.temperature;
     this.maxTokens = geminiConfig.maxTokens;
@@ -115,6 +115,55 @@ export class GeminiClient {
 
   // 添加私有属性标识是否使用 yunwu.ai
   private isYunwu: boolean;
+
+  /**
+   * 将 Gemini 格式转换为 OpenAI 格式（yunwu.ai 兼容）
+   */
+  private convertToOpenAIFormat(geminiRequest: Record<string, unknown>, systemInstruction?: string): Record<string, unknown> {
+    // 提取用户消息（添加类型断言）
+    const contents = geminiRequest.contents as Array<{ parts?: Array<{ text?: string }> }> | undefined;
+    const userContent = contents?.[0]?.parts?.[0]?.text || '';
+
+    // 构建 OpenAI 格式的消息数组
+    const messages: Array<{ role: string; content: string }> = [];
+
+    // 添加系统指令（如果提供）
+    if (systemInstruction) {
+      messages.push({
+        role: 'system',
+        content: systemInstruction,
+      });
+    }
+
+    // 添加用户消息
+    messages.push({
+      role: 'user',
+      content: userContent,
+    });
+
+    return {
+      model: this.model,
+      messages,
+      temperature: this.temperature,
+      max_tokens: this.maxTokens,
+    };
+  }
+
+  /**
+   * 解析 OpenAI 格式的响应（yunwu.ai）
+   */
+  private parseOpenAIResponse(data: any): { text: string; usage?: any } {
+    const text = data.choices?.[0]?.message?.content || '';
+    const usage = data.usage
+      ? {
+          promptTokens: data.usage.prompt_tokens || 0,
+          completionTokens: data.usage.completion_tokens || 0,
+          totalTokens: data.usage.total_tokens || 0,
+        }
+      : undefined;
+
+    return { text, usage };
+  }
 
   /**
    * 通用 Gemini API 调用方法（公共方法，用于测试）
@@ -153,24 +202,19 @@ export class GeminiClient {
       }
 
       // 发送请求
-      // yunwu.ai 使用不同的 API 格式
+      // yunwu.ai 使用 Gemini 原生格式
       const apiUrl = this.isYunwu
-        ? `${this.endpoint}/chat/completions`  // yunwu.ai 使用 OpenAI 兼容格式
-        : `${this.endpoint}/models/${this.model}:generateContent?key=${this.apiKey}`;  // 标准 Gemini 格式
+        ? `${this.endpoint}/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`  // 非流式端点
+        : `${this.endpoint}/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
 
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
       };
 
-      // yunwu.ai 需要在 Header 中传递 API Key
-      if (this.isYunwu) {
-        headers['Authorization'] = `Bearer ${this.apiKey}`;
-      }
-
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers,
-        body: JSON.stringify(this.isYunwu ? this.convertToOpenAIFormat(requestBody, systemInstruction) : requestBody),
+        body: JSON.stringify(requestBody),
         signal: controller.signal,
       });
 
@@ -183,21 +227,23 @@ export class GeminiClient {
 
       const data = await response.json();
 
-      // 提取生成的文本
-      const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      // 根据不同的 API 格式提取生成的文本
+      let generatedText: string;
+      let usage: any;
 
-      if (!generatedText) {
-        throw new Error('Empty response from Gemini API');
-      }
-
-      // 提取使用情况
-      const usage = data.usageMetadata
+      // yunwu.ai 和标准 Gemini 都返回相同的原生格式
+      generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      usage = data.usageMetadata
         ? {
             promptTokens: data.usageMetadata.promptTokenCount || 0,
             completionTokens: data.usageMetadata.candidatesTokenCount || 0,
             totalTokens: data.usageMetadata.totalTokenCount || 0,
           }
         : undefined;
+
+      if (!generatedText) {
+        throw new Error('Empty response from API');
+      }
 
       return {
         success: true,

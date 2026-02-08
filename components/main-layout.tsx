@@ -5,20 +5,15 @@ import { Sidebar } from "./sidebar";
 
 interface MainLayoutProps {
   children: ReactNode;
-  currentPath?: string;
 }
 
-export function MainLayout({ children, currentPath }: MainLayoutProps) {
-  const [path, setPath] = useState(currentPath);
-
+export function MainLayout({ children }: MainLayoutProps) {
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar currentPath={path} onNavigate={setPath} />
+      <Sidebar />
       <main className="ml-[260px] min-h-screen">
         {children}
       </main>
     </div>
   );
 }
-
-import { useState } from "react";
