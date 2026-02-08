@@ -11,7 +11,11 @@
     "remotion:render": "remotion render RemotionRoot",
     "remotion:render:subtitle": "remotion render CaptionedVideo --props=./public/subtitle-props.json",
     "test:api": "tsx scripts/test-api.ts",
-    "test:api:watch": "tsx watch scripts/test-api.ts"
+    "test:api:watch": "tsx watch scripts/test-api.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

@@ -214,6 +214,162 @@ git push                # 推送到 GitHub
 - `remotion/index.ts` - Remotion 入口文件
 - 示例字幕数据和 props 文件
 
+### ✅ 第五阶段：API 配置系统（2025-02-08）
+
+**环境变量配置**:
+- `.env.example` - 完整的环境变量模板（137 行配置）
+- `.env.local` - 本地开发环境配置
+- `env.d.ts` - TypeScript 环境变量类型定义
+
+**统一配置管理** (`lib/config/`):
+- `index.ts` - 集中管理所有配置模块
+  - `config` - 应用基础配置
+  - `geminiConfig` - Gemini 3 API 配置
+  - `elevenlabsConfig` - ElevenLabs API 配置
+  - `dbConfig` - 数据库配置
+  - `storageConfig` - 文件存储配置
+  - `ffmpegConfig` - FFmpeg 配置
+  - `queueConfig` - BullMQ 任务队列配置
+  - `wsConfig` - WebSocket 配置
+
+**Gemini 3 API 客户端** (`lib/api/gemini.ts`):
+- ✅ 支持 yunwu.ai 代理（国内用户）
+- ✅ 支持标准 Google Gemini API
+- ✅ 自动适配不同的 API 格式
+- ✅ 完整的 TypeScript 类型定义
+- ✅ 主要方法：
+  - `analyzeVideo()` - 视频分析
+  - `findHighlights()` - 高光时刻检测
+  - `extractStorylines()` - 故事线提取
+  - `generateRecapScripts()` - 解说文案生成
+
+**ElevenLabs API 客户端** (`lib/api/elevenlabs.ts`):
+- ✅ TTS 文本转语音
+- ✅ 支持获取语音列表（用户语音 + 共享语音库）
+- ✅ 支持获取模型列表
+- ✅ 批量文本转语音
+- ✅ 语音预览功能
+- ✅ 完整的 TypeScript 类型定义
+- ✅ 主要方法：
+  - `getVoices()` - 获取用户语音
+  - `getSharedVoices()` - 获取共享语音库
+  - `getModels()` - 获取可用模型
+  - `textToSpeech()` - 文本转语音
+  - `batchTextToSpeech()` - 批量转换
+
+**测试工具** (`scripts/test-api.ts`):
+- ✅ API 配置测试脚本
+- ✅ 测试 4 项：配置加载、Gemini API、ElevenLabs API、TTS 生成
+- ✅ 命令：`npm run test:api`
+
+**文档**:
+- ✅ `docs/API-SETUP.md` - API 配置指南
+- ✅ `docs/API-EXAMPLES.md` - API 使用示例和最佳实践
+
+**测试结果**:
+```
+✅ 配置加载成功
+✅ Gemini API 连接成功 (yunwu.ai + gemini-3-pro-preview)
+✅ ElevenLabs API 连接成功 (37 个语音)
+✅ ElevenLabs TTS 生成成功 (30 KB MP3)
+状态: 4 成功 | 0 失败
+```
+
+### ✅ 第六阶段：数据库与任务队列基础设施（2025-02-08）
+
+**Agent 4 - 数据层与任务队列开发** - 根据 `AGENT-4-GUIDE.md` 完成
+
+**数据库层** (`lib/db/`):
+- ✅ `schema.ts` - 7 张表的完整定义
+  - `videos` - 视频素材表
+  - `shots` - 镜头切片表
+  - `storylines` - 故事线表
+  - `highlights` - 高光候选表（模式 A）
+  - `recap_tasks` - 解说任务表（模式 B）
+  - `recap_segments` - 解说词片段表
+  - `queue_jobs` - 任务队列记录表
+- ✅ `client.ts` - SQLite 连接管理
+  - 自动初始化表结构
+  - WAL 模式优化并发
+  - 索引优化查询性能
+  - 健康检查和重置方法
+- ✅ `queries.ts` - 封装的查询 API
+  - 7 个查询模块（video, shot, storyline, highlight, recapTask, recapSegment, queueJob）
+  - 统计查询 API
+  - CRUD 操作封装
+- ✅ `init.ts` - 应用初始化脚本
+  - 数据库初始化
+  - WebSocket 服务器启动
+  - 优雅退出处理
+
+**任务队列系统** (`lib/queue/`):
+- ✅ `bullmq.ts` - BullMQ 队列管理器
+  - 4 个任务队列配置
+  - Worker 管理
+  - 事件监听
+  - 统计信息查询
+- ✅ 与数据库集成（queue_jobs 表）
+- ✅ 支持任务重试和超时
+
+**WebSocket 实时通信** (`lib/ws/`):
+- ✅ `server.ts` - WebSocket 服务器
+  - 客户端订阅管理
+  - 4 种消息类型（progress, status, error, complete）
+  - 广播和单播功能
+  - 心跳机制
+- ✅ 集成到应用初始化流程
+
+**API Routes**:
+- ✅ `/api/health` - 健康检查 + 数据库统计
+- ✅ `/api/db/init` - 数据库初始化/重置（开发环境）
+
+**依赖安装**:
+```json
+{
+  "drizzle-orm": "^0.45.1",
+  "better-sqlite3": "^12.6.2",
+  "drizzle-kit": "^0.31.8",
+  "bullmq": "^5.67.3",
+  "ioredis": "^5.9.2",
+  "ws": "^8.19.0",
+  "nanoid": "^5.1.6"
+}
+```
+
+**配置文件**:
+- ✅ `drizzle.config.ts` - Drizzle ORM 配置
+- ✅ NPM 脚本命令：`db:push`, `db:migrate`, `db:studio`
+
+**目录结构**:
+```
+lib/
+├── db/              # 数据库层
+│   ├── schema.ts
+│   ├── client.ts
+│   ├── queries.ts
+│   └── init.ts
+├── queue/           # 任务队列
+│   └── bullmq.ts
+├── ws/              # WebSocket
+│   └── server.ts
+├── api/             # AI 服务（已有）
+└── config/          # 配置（已有）
+```
+
+**验证结果**:
+```
+✅ 所有依赖安装完成
+✅ 项目构建成功 (npm run build)
+✅ 类型检查通过
+✅ 数据库表结构完整
+✅ 任务队列配置完成
+✅ WebSocket 配置完成
+```
+
+**文档**:
+- ✅ `BASIC_INFRASTRUCTURE.md` - 基础设施搭建完成报告
+- ✅ `AGENT-4-DEPENDENCIES.md` - 依赖安装完成报告
+
 ---
 
 ## 项目结构
