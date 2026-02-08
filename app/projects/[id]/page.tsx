@@ -15,7 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ArrowLeft, Upload, MoreVertical, Trash2, Eye } from "lucide-react";
+import { ArrowLeft, Upload, MoreVertical, Trash2, Eye, Edit } from "lucide-react";
 import type { Video } from "@/lib/db/schema";
 
 interface Project {
@@ -36,6 +36,8 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editingVideo, setEditingVideo] = useState<Video | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   // 加载项目详情和视频列表
   const loadData = async () => {
@@ -133,6 +135,11 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
     }
   };
 
+  const handleEditVideo = (video: Video) => {
+    setEditingVideo(video);
+    setEditDialogOpen(true);
+  };
+
   const handleUploadVideos = async (files: File[]) => {
     if (!project) return;
 
@@ -216,12 +223,6 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
       {/* 操作按钮 */}
       <div className="mb-6 flex gap-3">
         <UploadVideoDialog projectId={project.id} onUploadComplete={loadData} />
-        <EditProjectDialog
-          projectId={project.id}
-          projectName={project.name}
-          projectDescription={project.description || undefined}
-          onUpdate={loadData}
-        />
         <Button variant="outline">查看剧情树</Button>
       </div>
 
@@ -266,6 +267,12 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
                         <DropdownMenuItem>
                           <Eye className="w-4 h-4 mr-2" />
                           查看详情
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleEditVideo(video)}
+                        >
+                          <Edit className="w-4 h-4 mr-2" />
+                          编辑
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-red-600"
