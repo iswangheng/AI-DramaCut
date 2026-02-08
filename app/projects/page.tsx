@@ -39,6 +39,7 @@ function ProjectsContent() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
+  const [editingProject, setEditingProject] = useState<ProjectWithStats | null>(null);
 
   // 加载项目列表
   const loadProjects = async () => {
@@ -169,7 +170,12 @@ function ProjectsContent() {
     router.push(`/projects/${projectId}`);
   };
 
+  const handleEditProject = (project: ProjectWithStats) => {
+    setEditingProject(project);
+  };
+
   return (
+    <>
     <div className="p-10 animate-fade-in">
       {/* 页面标题 */}
       <div className="mb-8">
@@ -266,14 +272,11 @@ function ProjectsContent() {
                     <DropdownMenuItem
                       onClick={(e) => {
                         e.stopPropagation();
+                        handleEditProject(project);
                       }}
                     >
-                      <EditProjectDialog
-                        projectId={project.id!}
-                        projectName={project.name}
-                        projectDescription={project.description || undefined}
-                        onUpdate={loadProjects}
-                      />
+                      <Edit className="w-4 h-4 mr-2" />
+                      编辑
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       className="text-red-600"
@@ -330,6 +333,18 @@ function ProjectsContent() {
         </div>
       )}
     </div>
+
+    {/* 编辑项目对话框 */}
+    {editingProject && (
+      <EditProjectDialog
+        key={editingProject.id}
+        projectId={editingProject.id!}
+        projectName={editingProject.name}
+        projectDescription={editingProject.description || undefined}
+        onUpdate={loadProjects}
+      />
+    )}
+    </>
   );
 }
 

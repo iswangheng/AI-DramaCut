@@ -356,7 +356,7 @@ function TasksContent() {
                             size="sm"
                             onClick={() => console.log("取消任务:", job.jobId)}
                           >
-                            <Trash2 className="w-4 h-4 mr-1" />
+                            <Trash2 className="w-4 h-4 mr-2" />
                             取消
                           </Button>
                         )}
@@ -366,13 +366,13 @@ function TasksContent() {
                             size="sm"
                             onClick={() => console.log("重试任务:", job.jobId)}
                           >
-                            <RefreshCw className="w-4 h-4 mr-1" />
+                            <RefreshCw className="w-4 h-4 mr-2" />
                             重试
                           </Button>
                         )}
                         {job.status === "completed" && (
                           <Button size="sm" onClick={() => console.log("下载任务:", job.jobId)}>
-                            <Play className="w-4 h-4 mr-1" />
+                            <Play className="w-4 h-4 mr-2" />
                             下载
                           </Button>
                         )}
