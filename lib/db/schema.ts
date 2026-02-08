@@ -18,10 +18,35 @@ const timestamps = {
 };
 
 // ============================================
-// 1. 视频素材表 (videos)
+// 1. 项目表 (projects)
+// ============================================
+export const projects = sqliteTable('projects', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),                           // 项目名称
+  description: text('description'),                       // 项目描述
+
+  // 处理状态
+  status: text('status', {
+    enum: ['ready', 'processing', 'error']
+  }).notNull().default('ready'),                          // 处理状态
+
+  // 进度信息（用于 UI 显示）
+  progress: integer('progress').notNull().default(0),    // 整体进度 (0-100)
+  currentStep: text('current_step'),                     // 当前处理步骤描述
+
+  // 错误信息
+  errorMessage: text('error_message'),                    // 错误消息
+
+  ...timestamps,
+});
+
+// ============================================
+// 2. 视频素材表 (videos)
 // ============================================
 export const videos = sqliteTable('videos', {
   id: integer('id').primaryKey({ autoIncrement: true }),
+  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),  // 所属项目
+
   filename: text('filename').notNull(),                    // 原始文件名
   filePath: text('file_path').notNull(),                   // 存储路径
   fileSize: integer('file_size').notNull(),                // 文件大小（字节）
@@ -220,6 +245,9 @@ export const queueJobs = sqliteTable('queue_jobs', {
 // ============================================
 // 类型导出
 // ============================================
+
+export type Project = typeof projects.$inferSelect;
+export type NewProject = typeof projects.$inferInsert;
 
 export type Video = typeof videos.$inferSelect;
 export type NewVideo = typeof videos.$inferInsert;

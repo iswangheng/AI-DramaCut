@@ -660,6 +660,47 @@ ffmpeg -ss 00:12:34.567 -i input.mp4 -t 120.000 -c:v libx264 -preset fast -crf 1
 ffmpeg -ss 00:12:34 -i input.mp4 -t 120 -c:v copy output.mp4
 ```
 
+### 跨集切片的特殊处理（后端开发注意）
+当高光切片跨越不同剧集时，中间可能存在片尾、片头等特有转场，需要自动识别并去除：
+
+**检测逻辑**：
+1. **片尾检测**：每集最后 N 秒（通常 5-10 秒）可能包含片尾
+2. **片头检测**：每集开头 N 秒（通常 5-10 秒）可能包含片头
+3. **黑场/静音检测**：片头片尾通常伴随黑场和静音
+
+**处理策略**：
+```typescript
+// 伪代码示例
+if (clip.crossesEpisode) {
+  // 1. 从第一集的结束位置去除片尾
+  const firstClipEnd = trimVideo({
+    inputPath: firstEpisodePath,
+    startTimeMs: clip.startMs,
+    durationMs: firstEpisodeDurationMs - clip.startMs - endingCreditsDurationMs
+  });
+
+  // 2. 从第二集的开始位置去除片头
+  const secondClipStart = trimVideo({
+    inputPath: secondEpisodePath,
+    startTimeMs: openingCreditsDurationMs,
+    durationMs: clip.endMs - openingCreditsDurationMs
+  });
+
+  // 3. 拼接两个片段（使用 crossfade 淡入淡出）
+  const finalClip = concatenateVideos([firstClipEnd, secondClipStart]);
+}
+```
+
+**存储到数据库**：
+- `highlights` 表的 `crossesEpisode` 字段标记是否跨集
+- `endVideoId` 和 `endVideoName` 记录结束视频信息
+- 后端渲染时根据这些字段决定是否应用转场移除逻辑
+
+**UI 显示**：
+- 跨集切片在列表中显示特殊标记
+- 显示来源集数和结束集数
+- 例如："身份曝光场景（第1集 → 第2集）"
+
 ---
 
 ## 下一步开发计划

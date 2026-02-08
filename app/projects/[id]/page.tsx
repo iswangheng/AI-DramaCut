@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { CreateProjectDialog } from "@/components/create-project-dialog";
+import { UploadVideoDialog } from "@/components/upload-video-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -103,6 +104,22 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
     }
   };
 
+  const handleUploadVideos = (files: File[]) => {
+    // 模拟添加视频
+    const newVideos: Video[] = files.map((file) => ({
+      id: Date.now().toString() + Math.random(),
+      filename: file.name,
+      duration: "--:--",
+      fileSize: `${(file.size / 1024 / 1024 / 1024).toFixed(2)} GB`,
+      status: "processing" as const,
+      progress: 0,
+      currentStep: "上传完成，开始处理...",
+      createdAt: new Date(),
+    }));
+
+    setVideos([...newVideos, ...videos]);
+  };
+
   return (
     <div className="p-10 animate-fade-in">
       {/* 页面标题 */}
@@ -127,10 +144,7 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
 
       {/* 操作按钮 */}
       <div className="mb-6 flex gap-3">
-        <Button className="gap-2">
-          <Upload className="w-4 h-4" />
-          上传视频
-        </Button>
+        <UploadVideoDialog onUpload={handleUploadVideos} />
         <Button variant="outline">查看剧情树</Button>
       </div>
 
@@ -221,10 +235,7 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
         <div className="text-center py-16">
           <div className="text-6xl mb-4">📹</div>
           <p className="text-muted-foreground text-lg mb-4">还没有上传任何视频</p>
-          <Button className="gap-2">
-            <Upload className="w-4 h-4" />
-            上传第一个视频
-          </Button>
+          <UploadVideoDialog onUpload={handleUploadVideos} />
         </div>
       )}
     </div>

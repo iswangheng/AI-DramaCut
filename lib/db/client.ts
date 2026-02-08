@@ -106,6 +106,7 @@ class DatabaseClient {
       'shots',
       'queue_jobs',
       'videos',
+      'projects',
     ];
 
     if (!sqlite) {
@@ -134,10 +135,26 @@ class DatabaseClient {
       throw new Error('SQLite 连接未初始化');
     }
 
+    // 创建 projects 表
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS projects (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'ready',
+        progress INTEGER NOT NULL DEFAULT 0,
+        current_step TEXT,
+        error_message TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+
     // 创建 videos 表
     sqlite.exec(`
       CREATE TABLE IF NOT EXISTS videos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
         filename TEXT NOT NULL,
         file_path TEXT NOT NULL,
         file_size INTEGER NOT NULL,
@@ -267,6 +284,8 @@ class DatabaseClient {
     `);
 
     // 创建索引
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status)`);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_videos_project_id ON videos(project_id)`);
     sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status)`);
     sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_shots_video_id ON shots(video_id)`);
     sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_highlights_video_id ON highlights(video_id)`);
@@ -303,7 +322,8 @@ class DatabaseClient {
   async getStats() {
     const db = this.getDb();
 
-    const [videoCount, shotCount, storylineCount, highlightCount, recapTaskCount] = await Promise.all([
+    const [projectCount, videoCount, shotCount, storylineCount, highlightCount, recapTaskCount] = await Promise.all([
+      db.select({ count: schema.projects }).from(schema.projects),
       db.select({ count: schema.videos }).from(schema.videos),
       db.select({ count: schema.shots }).from(schema.shots),
       db.select({ count: schema.storylines }).from(schema.storylines),
@@ -312,6 +332,7 @@ class DatabaseClient {
     ]);
 
     return {
+      projects: projectCount.length,
       videos: videoCount.length,
       shots: shotCount.length,
       storylines: storylineCount.length,

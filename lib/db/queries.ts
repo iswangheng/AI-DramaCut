@@ -5,8 +5,122 @@
 
 import { db } from './client';
 import * as schema from './schema';
-import { eq, desc, and, sql } from 'drizzle-orm';
-import type { Video, Shot, Storyline, Highlight, RecapTask, RecapSegment } from './schema';
+import { eq, desc, and, sql, like } from 'drizzle-orm';
+import type { Project, Video, Shot, Storyline, Highlight, RecapTask, RecapSegment } from './schema';
+
+// ============================================
+// 项目相关查询 (projects)
+// ============================================
+
+export const projectQueries = {
+  /**
+   * 创建项目
+   */
+  async create(data: typeof schema.projects.$inferInsert) {
+    const [project] = await db.insert(schema.projects).values(data).returning();
+    return project;
+  },
+
+  /**
+   * 根据 ID 获取项目
+   */
+  async getById(id: number) {
+    const [project] = await db.select().from(schema.projects).where(eq(schema.projects.id, id));
+    return project;
+  },
+
+  /**
+   * 获取所有项目列表
+   */
+  async list(limit = 50, offset = 0) {
+    const projects = await db
+      .select()
+      .from(schema.projects)
+      .orderBy(desc(schema.projects.createdAt))
+      .limit(limit)
+      .offset(offset);
+    return projects;
+  },
+
+  /**
+   * 搜索项目（按名称）
+   */
+  async search(keyword: string, limit = 50) {
+    const projects = await db
+      .select()
+      .from(schema.projects)
+      .where(like(schema.projects.name, `%${keyword}%`))
+      .orderBy(desc(schema.projects.createdAt))
+      .limit(limit);
+    return projects;
+  },
+
+  /**
+   * 更新项目
+   */
+  async update(id: number, data: Partial<typeof schema.projects.$inferInsert>) {
+    const [project] = await db
+      .update(schema.projects)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.projects.id, id))
+      .returning();
+    return project;
+  },
+
+  /**
+   * 更新项目状态和进度
+   */
+  async updateProgress(id: number, progress: number, currentStep?: string) {
+    const [project] = await db
+      .update(schema.projects)
+      .set({
+        progress,
+        currentStep,
+        status: progress === 100 ? 'ready' : 'processing',
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.projects.id, id))
+      .returning();
+    return project;
+  },
+
+  /**
+   * 删除项目
+   */
+  async delete(id: number) {
+    const [project] = await db
+      .delete(schema.projects)
+      .where(eq(schema.projects.id, id))
+      .returning();
+    return project;
+  },
+
+  /**
+   * 获取项目及其视频统计信息
+   */
+  async getWithStats(id: number) {
+    const [project] = await db.select().from(schema.projects).where(eq(schema.projects.id, id));
+    if (!project) return null;
+
+    const videos = await db
+      .select()
+      .from(schema.videos)
+      .where(eq(schema.videos.projectId, id));
+
+    const videoCount = videos.length;
+    const totalDurationMs = videos.reduce((sum, v) => sum + v.durationMs, 0);
+    const totalDuration = `${Math.floor(totalDurationMs / 60000)} 分钟`;
+
+    return {
+      ...project,
+      videoCount,
+      totalDuration,
+    };
+  },
+};
 
 // ============================================
 // 视频相关查询 (videos)
@@ -19,6 +133,18 @@ export const videoQueries = {
   async create(data: typeof schema.videos.$inferInsert) {
     const [video] = await db.insert(schema.videos).values(data).returning();
     return video;
+  },
+
+  /**
+   * 根据项目 ID 获取所有视频
+   */
+  async getByProjectId(projectId: number) {
+    const videos = await db
+      .select()
+      .from(schema.videos)
+      .where(eq(schema.videos.projectId, projectId))
+      .orderBy(desc(schema.videos.createdAt));
+    return videos;
   },
 
   /**
@@ -470,6 +596,15 @@ export const statsQueries = {
    * 获取数据库统计信息
    */
   async getOverview() {
+    const [projectStats] = await db
+      .select({
+        total: sql<number>`COUNT(*)`,
+        ready: sql<number>`SUM(CASE WHEN status = 'ready' THEN 1 ELSE 0 END)`,
+        processing: sql<number>`SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END)`,
+        error: sql<number>`SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END)`,
+      })
+      .from(schema.projects);
+
     const [videoStats] = await db
       .select({
         total: sql<number>`COUNT(*)`,
@@ -499,6 +634,7 @@ export const statsQueries = {
       .from(schema.recapTasks);
 
     return {
+      projects: projectStats,
       videos: videoStats,
       highlights: highlightStats,
       recaps: recapStats,
@@ -511,6 +647,7 @@ export const statsQueries = {
 // ============================================
 
 export const queries = {
+  project: projectQueries,
   video: videoQueries,
   shot: shotQueries,
   storyline: storylineQueries,

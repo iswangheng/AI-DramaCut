@@ -7,6 +7,8 @@ import { Queue, Worker, QueueEvents } from 'bullmq';
 import Redis from 'ioredis';
 import { queueConfig } from '../config';
 import { queries } from '../db';
+import { wsServer } from '../ws/server';
+import { videoJobProcessor } from './workers';
 
 // ============================================
 // Redis 连接配置
@@ -148,6 +150,13 @@ export class QueueManager {
 
     this.workers.set(queueName, worker);
     console.log(`✅ Worker 已创建: ${queueName}`);
+  }
+
+  /**
+   * 创建视频处理 Worker（使用预定义的处理器）
+   */
+  createVideoWorker(queueName = queueConfig.queues.videoProcessing) {
+    this.createWorker(queueName, videoJobProcessor);
   }
 
   /**
