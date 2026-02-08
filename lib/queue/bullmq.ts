@@ -8,7 +8,8 @@ import Redis from 'ioredis';
 import { queueConfig } from '../config';
 import { queries } from '../db';
 import { wsServer } from '../ws/server';
-import { videoJobProcessor } from './workers';
+// 移除循环依赖：不直接导入处理器，改为动态导入
+// import { videoJobProcessor } from './workers';
 
 // ============================================
 // Redis 连接配置
@@ -155,7 +156,9 @@ export class QueueManager {
   /**
    * 创建视频处理 Worker（使用预定义的处理器）
    */
-  createVideoWorker(queueName = queueConfig.queues.videoProcessing) {
+  async createVideoWorker(queueName = queueConfig.queues.videoProcessing) {
+    // 动态导入处理器，避免循环依赖
+    const { videoJobProcessor } = await import('./workers');
     this.createWorker(queueName, videoJobProcessor);
   }
 
@@ -258,10 +261,19 @@ export class QueueManager {
 }
 
 // ============================================
-// 导出单例实例
+// 导出单例实例和队列
 // ============================================
 
 export const queueManager = new QueueManager();
+
+// 导出常用队列
+export const videoJobsQueue = queueManager.getQueue(queueConfig.queues.videoProcessing);
+
+/**
+ * 高光切片渲染队列
+ * 专门用于处理高光切片的视频渲染任务
+ */
+export const highlightClipsQueue = queueManager.getQueue('highlight-clips');
 
 // 导出队列名称常量
 export const QUEUE_NAMES = queueConfig.queues;

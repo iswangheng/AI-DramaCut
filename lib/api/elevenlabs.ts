@@ -665,7 +665,22 @@ export class ElevenLabsClient {
 }
 
 // ============================================
-// 导出单例实例
+// 导出单例实例（懒加载）
 // ============================================
 
-export const elevenlabsClient = new ElevenLabsClient();
+let clientInstance: ElevenLabsClient | null = null;
+
+export function getElevenLabsClient(): ElevenLabsClient {
+  if (!clientInstance) {
+    clientInstance = new ElevenLabsClient();
+  }
+  return clientInstance;
+}
+
+// 向后兼容：导出一个 getter
+export const elevenlabsClient = new Proxy({} as ElevenLabsClient, {
+  get(target, prop) {
+    const client = getElevenLabsClient();
+    return client[prop as keyof ElevenLabsClient];
+  }
+});

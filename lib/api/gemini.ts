@@ -26,6 +26,17 @@ export interface GeminiResponse<T = unknown> {
 }
 
 /**
+ * 音频信息
+ */
+export interface AudioInfo {
+  hasDialogue: boolean;       // 是否有对白
+  dialogue?: string;          // 对白内容（如果有）
+  bgmStyle?: string;          // BGM 风格（紧张、悲伤、浪漫等）
+  soundEffects?: string[];    // 音效列表（耳光、哭声等）
+  musicCues?: string[];       // 音乐提示点（时间戳）
+}
+
+/**
  * 场景信息
  */
 export interface Scene {
@@ -36,6 +47,7 @@ export interface Scene {
   dialogue?: string;
   characters?: string[];
   viralScore?: number; // 爆款潜力分数 (0-10)
+  audioInfo?: AudioInfo;     // 音频信息（新增）
 }
 
 /**
@@ -271,6 +283,128 @@ export class GeminiClient {
   }
 
   /**
+   * 读取文件并转换为 Base64
+   */
+  private async fileToBase64(filePath: string): Promise<string> {
+    const fs = await import('fs/promises');
+    const buffer = await fs.readFile(filePath);
+    return buffer.toString('base64');
+  }
+
+  /**
+   * 视频理解 API（支持直接上传视频文件）
+   * 根据 yunwu.ai OpenAPI 规范实现
+   *
+   * @param videoPath 视频文件路径
+   * @param prompt 分析提示词
+   * @param systemInstruction 系统指令
+   * @param onProgress 进度回调（可选）
+   */
+  async analyzeVideoWithUpload(
+    videoPath: string,
+    prompt: string,
+    systemInstruction?: string,
+    onProgress?: (progress: number, message: string) => void
+  ): Promise<GeminiResponse<string>> {
+    try {
+      onProgress?.(10, '读取视频文件...');
+
+      // 1. 读取视频文件并转换为 base64
+      const videoBase64 = await this.fileToBase64(videoPath);
+
+      onProgress?.(30, '上传视频到 AI...');
+
+      // 2. 构建符合 OpenAPI 规范的请求体
+      const requestBody: Record<string, unknown> = {
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                inline_data: {
+                  mime_type: 'video/mp4',
+                  data: videoBase64,
+                },
+              },
+              {
+                text: prompt,
+              },
+            ],
+          },
+        ],
+      };
+
+      // 添加系统指令（如果提供）
+      if (systemInstruction) {
+        (requestBody.contents as any)[0].parts.unshift({
+          text: systemInstruction,
+        });
+      }
+
+      // 3. 发送请求到 yunwu.ai
+      const apiUrl = `${this.endpoint}/v1beta/models/gemini-2.5-pro:generateContent?key=${this.apiKey}`;
+
+      onProgress?.(50, 'AI 分析中...');
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        const error = new Error(`Gemini API error: ${response.status} - ${errorText}`) as any;
+        error.statusCode = response.status;
+        throw error;
+      }
+
+      onProgress?.(80, '解析分析结果...');
+
+      const data = await response.json();
+
+      // 提取生成的文本
+      const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      if (!generatedText) {
+        throw new Error('Empty response from API');
+      }
+
+      onProgress?.(100, '分析完成');
+
+      return {
+        success: true,
+        data: generatedText,
+      };
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          return {
+            success: false,
+            error: `Gemini API timeout after ${this.timeout}ms`,
+          };
+        }
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+      return {
+        success: false,
+        error: 'Unknown error occurred',
+      };
+    }
+  }
+
+  /**
    * 通用 Gemini API 调用方法（带重试机制）
    */
   async callApi(prompt: string, systemInstruction?: string): Promise<GeminiResponse> {
@@ -342,18 +476,251 @@ export class GeminiClient {
   }
 
   /**
-   * 分析视频内容（预分析）
-   * @param videoPath 视频文件路径
-   * @param sampleFrames 采样的关键帧 Base64 数组
+   * 音频理解 API
+   *
+   * @param audioPath 音频文件路径（MP3/WAV）
+   * @param prompt 分析提示词
+   * @param systemInstruction 系统指令
    */
-  async analyzeVideo(videoPath: string, sampleFrames?: string[]): Promise<GeminiResponse<VideoAnalysis>> {
+  async analyzeAudio(
+    audioPath: string,
+    prompt: string,
+    systemInstruction?: string
+  ): Promise<GeminiResponse<string>> {
+    try {
+      // 1. 读取音频文件并转换为 Base64
+      const audioBase64 = await this.fileToBase64(audioPath);
+
+      // 2. 构建符合 OpenAPI 规范的请求体
+      const requestBody: Record<string, unknown> = {
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                inline_data: {
+                  mime_type: 'audio/mp3',
+                  data: audioBase64,
+                },
+              },
+              {
+                text: prompt,
+              },
+            ],
+          },
+        ],
+      };
+
+      // 添加系统指令（如果提供）
+      if (systemInstruction) {
+        (requestBody.contents as any)[0].parts.unshift({
+          text: systemInstruction,
+        });
+      }
+
+      // 3. 发送请求到 yunwu.ai
+      const apiUrl = `${this.endpoint}/v1beta/models/gemini-2.5-pro:generateContent?key=${this.apiKey}`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        const error = new Error(`Gemini API error: ${response.status} - ${errorText}`) as any;
+        error.statusCode = response.status;
+        throw error;
+      }
+
+      const data = await response.json();
+
+      // 提取生成的文本
+      const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      if (!generatedText) {
+        throw new Error('Empty response from API');
+      }
+
+      return {
+        success: true,
+        data: generatedText,
+      };
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          return {
+            success: false,
+            error: `Gemini API timeout after ${this.timeout}ms`,
+          };
+        }
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+      return {
+        success: false,
+        error: 'Unknown error occurred',
+      };
+    }
+  }
+
+  /**
+   * 图片理解 API
+   *
+   * @param imagePath 图片文件路径
+   * @param prompt 分析提示词
+   * @param systemInstruction 系统指令
+   */
+  async analyzeImage(
+    imagePath: string,
+    prompt: string,
+    systemInstruction?: string
+  ): Promise<GeminiResponse<string>> {
+    try {
+      // 1. 读取图片文件并转换为 base64
+      const imageBase64 = await this.fileToBase64(imagePath);
+
+      // 2. 构建符合 OpenAPI 规范的请求体
+      const requestBody: Record<string, unknown> = {
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                inline_data: {
+                  mime_type: 'image/png',
+                  data: imageBase64,
+                },
+              },
+              {
+                text: prompt,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseModalities: ['TEXT', 'IMAGE'],
+        },
+      };
+
+      // 添加系统指令（如果提供）
+      if (systemInstruction) {
+        (requestBody.contents as any)[0].parts.unshift({
+          text: systemInstruction,
+        });
+      }
+
+      // 3. 发送请求到 yunwu.ai
+      const apiUrl = `${this.endpoint}/v1beta/models/gemini-2.5-pro:generateContent?key=${this.apiKey}`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        const error = new Error(`Gemini API error: ${response.status} - ${errorText}`) as any;
+        error.statusCode = response.status;
+        throw error;
+      }
+
+      const data = await response.json();
+
+      // 提取生成的文本
+      const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      if (!generatedText) {
+        throw new Error('Empty response from API');
+      }
+
+      return {
+        success: true,
+        data: generatedText,
+      };
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          return {
+            success: false,
+            error: `Gemini API timeout after ${this.timeout}ms`,
+          };
+        }
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+      return {
+        success: false,
+        error: 'Unknown error occurred',
+      };
+    }
+  }
+
+  /**
+   * 分析视频内容（智能模式：优先采样，必要时上传）
+   * @param videoPath 视频文件路径
+   * @param sampleFrames 采样的关键帧 Base64 数组（可选）
+   * @param onProgress 进度回调
+   */
+  /**
+   * 分析视频内容（智能模式：优先采样，必要时上传）
+   * @param videoPath 视频文件路径
+   * @param sampleFrames 采样的关键帧 Base64 数组（可选）
+   * @param onProgress 进度回调
+   * @param audioAnalysis 音频分析结果（可选，JSON 字符串）
+   */
+  async analyzeVideo(
+    videoPath: string,
+    sampleFrames?: string[],
+    onProgress?: (progress: number, message: string) => void,
+    audioAnalysis?: string
+  ): Promise<GeminiResponse<VideoAnalysis>> {
     const systemInstruction = `你是一位资深的短剧导演和爆款内容分析师。
 你的任务是对输入的短剧片段进行全维度拆解，输出结构化的 JSON 数据。
+
+**重要**：请同时分析视觉内容（画面）和听觉内容（配音、配乐、音效）。
+- 画面：人物表情、动作、场景、镜头切换
+- 配音：对白、旁白、情绪表达
+- 配乐：背景音乐的风格、节奏、情绪烘托
+- 音效：关键音效（反转、冲突、高光时刻）
+
 返回的 JSON 必须严格遵循指定的 schema，不要添加任何额外的注释或说明。`;
 
-    const prompt = `请分析以下视频文件：${videoPath}
+    const prompt = `请分析以下视频，返回结构化的 JSON 数据。
 
-${sampleFrames && sampleFrames.length > 0 ? `已提供 ${sampleFrames.length} 个关键帧用于分析。` : ''}
+${sampleFrames && sampleFrames.length > 0 ? `已提供 ${sampleFrames.length} 个关键帧用于分析（高密度采样，能捕捉更多细节）。` : '已上传完整视频文件（包含画面和音频）。'}
+
+${audioAnalysis ? `**音频分析结果**（已单独分析）：\n${audioAnalysis}\n\n请结合这些音频信息，将对话和音效准确地匹配到对应的镜头中。` : '**分析要求**：请同时分析画面和音频（配音、配乐、音效）。'}
+
+**分析维度**：
+1. **视觉分析**：人物动作、表情变化、场景切换、镜头运动
+2. **听觉分析**：
+   - 对白：角色台词（尽量准确提取）
+   - 配音：情感表达（语气、语调）
+   - 配乐：BGM 风格（紧张、浪漫、悲伤等）
+   - 音效：关键音效（耳光、哭声、玻璃破碎等）
 
 请返回以下 JSON 格式的分析结果：
 \`\`\`json
@@ -367,7 +734,12 @@ ${sampleFrames && sampleFrames.length > 0 ? `已提供 ${sampleFrames.length} �
       "emotion": "愤怒/反转/惊喜/恐惧",
       "dialogue": "核心台词内容（如果有）",
       "characters": ["角色1", "角色2"],
-      "viralScore": 8.5
+      "viralScore": 8.5,
+      "audioInfo": {
+        "hasDialogue": true,
+        "bgmStyle": "紧张/悲伤/浪漫/欢快",
+        "soundEffects": ["耳光声", "哭声"]
+      }
     }
   ],
   "storylines": ["复仇线", "身份曝光线", "爱情线"],
@@ -375,9 +747,22 @@ ${sampleFrames && sampleFrames.length > 0 ? `已提供 ${sampleFrames.length} �
   "highlights": [15000, 45000, 78000],
   "durationMs": 120000
 }
-\`\`\``;
+\`\`\`
 
-    const response = await this.callApi(prompt, systemInstruction);
+${sampleFrames && sampleFrames.length > 100 ? `注意：由于提供了高密度的关键帧采样（${sampleFrames.length} 帧），请仔细分析帧与帧之间的连贯性和变化，准确捕捉每个镜头的起止时间。` : ''}`;
+
+    onProgress?.(20, '准备 AI 分析...');
+
+    // 根据是否有采样帧选择不同的调用方式
+    let response: GeminiResponse;
+
+    if (sampleFrames && sampleFrames.length > 0) {
+      // 使用关键帧采样（更快、更便宜）
+      response = await this.callApi(prompt, systemInstruction);
+    } else {
+      // 直接上传视频（更准确，包含音频）
+      response = await this.analyzeVideoWithUpload(videoPath, prompt, systemInstruction, onProgress);
+    }
 
     if (!response.success || !response.data) {
       return response as GeminiResponse<VideoAnalysis>;
@@ -847,7 +1232,22 @@ ${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)}] ${s.d
 }
 
 // ============================================
-// 导出单例实例
+// 导出单例实例（懒加载）
 // ============================================
 
-export const geminiClient = new GeminiClient();
+let clientInstance: GeminiClient | null = null;
+
+export function getGeminiClient(): GeminiClient {
+  if (!clientInstance) {
+    clientInstance = new GeminiClient();
+  }
+  return clientInstance;
+}
+
+// 向后兼容：导出一个 getter
+export const geminiClient = new Proxy({} as GeminiClient, {
+  get(target, prop) {
+    const client = getGeminiClient();
+    return client[prop as keyof GeminiClient];
+  }
+});

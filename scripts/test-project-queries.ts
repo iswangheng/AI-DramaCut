@@ -63,7 +63,7 @@ async function main() {
     logSection('4. 获取项目列表');
     const projects = await projectQueries.list();
     console.log(`找到 ${projects.length} 个项目:`);
-    projects.forEach(p => {
+    projects.forEach((p: any) => {
       console.log(`  - ${p.name} (${p.status}) - ${p.progress}%`);
     });
     logSuccess('项目列表查询成功');
@@ -85,7 +85,7 @@ async function main() {
     logSection('6. 搜索项目');
     const searchResults = await projectQueries.search('霸道');
     console.log(`搜索 "霸道" 找到 ${searchResults.length} 个结果:`);
-    searchResults.forEach(p => {
+    searchResults.forEach((p: any) => {
       console.log(`  - ${p.name}`);
     });
     logSuccess('项目搜索成功');
@@ -129,7 +129,7 @@ async function main() {
     logSection('9. 获取项目的所有视频');
     const projectVideos = await videoQueries.getByProjectId(project1.id!);
     console.log(`项目 "${project1.name}" 包含 ${projectVideos.length} 个视频:`);
-    projectVideos.forEach(v => {
+    projectVideos.forEach((v: any) => {
       console.log(`  - ${v.filename} (${v.status})`);
     });
     logSuccess('项目视频查询成功');

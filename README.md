@@ -124,63 +124,218 @@ DramaGen AI 是一款面向短剧/漫剧剪辑师、投放运营及自媒体博�
 
 ### 环境要求
 
-- Node.js >= 18.0.0
-- Redis >= 6.0
-- FFmpeg >= 5.0
+**必需软件**：
+- **Node.js** >= 18.0.0（推荐 20.x）
+- **Redis** >= 6.0（任务队列必需）
+- **FFmpeg** >= 5.0（视频处理必需）
+- **npm** >= 9.0.0
 
-### 安装依赖
+**可选软件**：
+- **Git**（版本控制）
+
+---
+
+### 📦 第一步：安装依赖
+
+#### 1.1 macOS 系统
 
 ```bash
+# 安装 Homebrew（如果未安装）
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# 安装 Redis
+brew install redis
+
+# 安装 FFmpeg
+brew install ffmpeg
+
+# 验证安装
+redis-cli --version
+ffmpeg -version
+node -v
+```
+
+#### 1.2 Linux 系统（Ubuntu/Debian）
+
+```bash
+# 安装 Redis
+sudo apt update
+sudo apt install -y redis-server
+
+# 安装 FFmpeg
+sudo apt install -y ffmpeg
+
+# 验证安装
+redis-cli --version
+ffmpeg -version
+node -v
+```
+
+#### 1.3 安装项目依赖
+
+```bash
+# 克隆仓库
+git clone https://github.com/iswangheng/AI-DramaCut.git
+cd AI-DramaCut
+
+# 安装 Node.js 依赖
 npm install
 ```
 
-### 配置环境变量
+---
 
-创建 `.env.local` 文件：
+### ⚙️ 第二步：配置环境变量
+
+#### 2.1 创建环境变量文件
+
+```bash
+# 复制示例配置
+cp .env.example .env.local
+```
+
+#### 2.2 编辑 `.env.local` 文件
+
+**必需配置**：
 
 ```env
-# Gemini API
-GEMINI_API_KEY=your_gemini_api_key
-YUNWU_API_ENDPOINT=https://your_yunwu_endpoint
+# ========================================
+# Gemini 3 API 配置（通过 yunwu.ai 代理）
+# ========================================
+YUNWU_API_ENDPOINT=https://yunwu.ai
+YUNWU_API_KEY=sk-your_yunwu_api_key_here
 
-# ElevenLabs API
-ELEVENLABS_API_KEY=your_elevenlabs_api_key
+# 或使用官方 Gemini API
+# GEMINI_API_KEY=your_gemini_api_key_here
 
-# Redis
+# Gemini 模型配置
+GEMINI_MODEL=gemini-3-pro-preview
+
+# ========================================
+# ElevenLabs API 配置（TTS 语音合成）
+# ========================================
+ELEVENLABS_API_KEY=sk-your_elevenlabs_api_key_here
+```
+
+**可选配置**（已有默认值）：
+
+```env
+# ========================================
+# Redis 配置
+# ========================================
 REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_PASSWORD=
-REDIS_DB=0
 
+# ========================================
+# 数据库配置（SQLite）
+# ========================================
+DATABASE_URL=./data/database.sqlite
+
+# ========================================
 # 应用配置
+# ========================================
 NODE_ENV=development
 PORT=3000
 ```
 
-### 初始化数据库
+> 💡 **提示**：获取 API Key
+> - **yunwu.ai**: 访问 https://yunwu.ai 注册并获取 API Key（推荐国内用户）
+> - **Gemini**: 访问 https://ai.google.dev/ 获取 API Key
+> - **ElevenLabs**: 访问 https://elevenlabs.io/ 获取 API Key
+
+---
+
+### 🗄️ 第三步：初始化数据库
 
 ```bash
+# 初始化 SQLite 数据库
+npm run db:init
+
+# 或使用 push 方式（推荐）
 npm run db:push
+
+# 验证数据库
+ls -la .data/local.db
 ```
 
-### 启动服务
+---
+
+### 🚀 第四步：启动服务
+
+#### 方式 A：快速启动（推荐）
 
 ```bash
-# 开发模式（启动 Next.js + Workers）
+# 使用启动脚本（自动启动所有服务）
+./scripts/test-all-services.sh
+```
+
+#### 方式 B：手动启动
+
+**打开 3 个终端窗口**：
+
+```bash
+# 终端 1: 启动 Redis
+brew services start redis  # macOS
+# 或
+sudo systemctl start redis  # Linux
+# 或
+redis-server  # 直接启动
+
+# 终端 2: 启动 Next.js 开发服务器
 npm run dev
 
-# 生产模式
-npm run build
-npm run start
-
-# 独立启动 Workers
-npm run workers
-npm run workers:dev  # 开发模式（热重载）
+# 终端 3: 启动 Worker 进程（任务队列处理器）
+npx tsx scripts/workers.ts
 ```
 
-### 访问应用
+---
 
-打开浏览器访问：http://localhost:3000
+### ✅ 第五步：验证服务
+
+```bash
+# 1. 检查 Redis
+redis-cli ping
+# 应该返回: PONG
+
+# 2. 检查 Next.js
+curl http://localhost:3000/api/health
+# 应该返回: {"success":true,...}
+
+# 3. 检查 Worker 进程
+ps aux | grep "tsx.*workers"
+# 应该看到 Worker 进程
+
+# 4. 检查数据库
+npm run db:studio
+# 打开浏览器访问 http://localhost:4983
+```
+
+---
+
+### 🌐 访问应用
+
+打开浏览器访问：**http://localhost:3000**
+
+- 项目管理：http://localhost:3000/projects
+- 高光切片：http://localhost:3000/highlight
+- 深度解说：http://localhost:3000/recap
+- 任务管理：http://localhost:3000/tasks
+
+---
+
+### 🛑 停止服务
+
+```bash
+# 停止 Redis
+brew services stop redis  # macOS
+# 或
+sudo systemctl stop redis  # Linux
+
+# 停止 Next.js（Ctrl+C）
+
+# 停止 Worker
+pkill -f "tsx.*workers"
+```
 
 ---
 

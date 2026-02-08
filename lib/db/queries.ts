@@ -111,7 +111,7 @@ export const projectQueries = {
       .where(eq(schema.videos.projectId, id));
 
     const videoCount = videos.length;
-    const totalDurationMs = videos.reduce((sum, v) => sum + v.durationMs, 0);
+    const totalDurationMs = videos.reduce((sum: number, v: any) => sum + v.durationMs, 0);
     const totalDuration = `${Math.floor(totalDurationMs / 60000)} 分钟`;
 
     return {
@@ -290,6 +290,14 @@ export const storylineQueries = {
   },
 
   /**
+   * 批量创建故事线
+   */
+  async createMany(data: typeof schema.storylines.$inferInsert[]) {
+    const storylines = await db.insert(schema.storylines).values(data).returning();
+    return storylines;
+  },
+
+  /**
    * 根据 ID 获取故事线
    */
   async getById(id: number) {
@@ -339,6 +347,17 @@ export const highlightQueries = {
   async createMany(data: typeof schema.highlights.$inferInsert[]) {
     const highlights = await db.insert(schema.highlights).values(data).returning();
     return highlights;
+  },
+
+  /**
+   * 根据 ID 获取高光
+   */
+  async getById(id: number) {
+    const [highlight] = await db
+      .select()
+      .from(schema.highlights)
+      .where(eq(schema.highlights.id, id));
+    return highlight;
   },
 
   /**

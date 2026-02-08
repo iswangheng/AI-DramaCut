@@ -360,12 +360,14 @@ export const db = new Proxy({} as any, {
     if (!_db) {
       _db = dbClient.getDb();
     }
-    return _db[prop];
+    // 使用类型断言解决 TypeScript 索引访问问题
+    return (_db as any)[prop];
   },
   set(target, prop, value) {
     if (_db) {
-      _db[prop] = value;
+      (_db as any)[prop] = value;
     }
+    return true;
   },
 });
 

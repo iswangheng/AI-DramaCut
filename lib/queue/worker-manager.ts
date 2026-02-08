@@ -7,6 +7,7 @@
 import { Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
 import { processors, VideoJobData } from './workers';
+import { processRenderHighlightJob, RenderHighlightJobData } from './workers/highlight-render';
 
 // 创建 Redis 连接（独立于 QueueManager）
 const redisConnection = new Redis({
@@ -17,8 +18,8 @@ const redisConnection = new Redis({
 
 interface WorkerInstance {
   name: string;
-  worker: Worker<VideoJobData, unknown, string> | null;
-  create: () => Worker<VideoJobData, unknown, string>;
+  worker: Worker<any, unknown, string> | null;
+  create: () => Worker<any, unknown, string>;
   start: () => void;
   stop: () => Promise<void>;
 }
@@ -59,6 +60,41 @@ function createVideoWorker(): Worker<VideoJobData, unknown, string> {
 }
 
 /**
+ * 创建高光切片渲染 Worker
+ * 处理高光切片的视频渲染任务
+ */
+function createHighlightRenderWorker(): Worker<RenderHighlightJobData> {
+  const worker = new Worker<RenderHighlightJobData>(
+    'highlight-clips',
+    async (job: Job<RenderHighlightJobData>) => {
+      return await processRenderHighlightJob(job);
+    },
+    {
+      connection: redisConnection,
+      concurrency: 1, // 高光渲染通常较重，并发设为1
+      limiter: {
+        max: 3, // 每 10 秒最多处理 3 个任务
+        duration: 10000,
+      },
+    }
+  );
+
+  worker.on('completed', (job) => {
+    console.log(`✅ 高光渲染完成: ${job.id}`);
+  });
+
+  worker.on('failed', (job, err) => {
+    console.error(`❌ 高光渲染失败: ${job?.id}`, err.message);
+  });
+
+  worker.on('progress', (job, progress) => {
+    console.log(`📊 高光渲染进度: ${job?.id} - ${progress}%`);
+  });
+
+  return worker;
+}
+
+/**
  * 视频处理 Worker 实例
  */
 export const videoWorkerInstance: WorkerInstance = {
@@ -78,6 +114,30 @@ export const videoWorkerInstance: WorkerInstance = {
       await this.worker.close();
       this.worker = null;
       console.log('✅ 视频处理 Worker 已停止');
+    }
+  },
+};
+
+/**
+ * 高光渲染 Worker 实例
+ */
+export const highlightRenderWorkerInstance: WorkerInstance = {
+  name: 'highlight-clips',
+  worker: null,
+  create: createHighlightRenderWorker,
+  start() {
+    if (!this.worker) {
+      console.log('🚀 启动高光渲染 Worker...');
+      this.worker = this.create();
+      console.log('✅ 高光渲染 Worker 已启动');
+    }
+  },
+  async stop() {
+    if (this.worker) {
+      console.log('🛑 停止高光渲染 Worker...');
+      await this.worker.close();
+      this.worker = null;
+      console.log('✅ 高光渲染 Worker 已停止');
     }
   },
 };
@@ -114,6 +174,7 @@ export class WorkerManager implements IWorkerManager {
     // 注册所有 Worker
     this.workers = [
       videoWorkerInstance,
+      highlightRenderWorkerInstance,
     ];
 
     // 自动启动

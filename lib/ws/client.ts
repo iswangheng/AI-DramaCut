@@ -16,7 +16,7 @@ interface WSMessage {
   };
 }
 
-interface WSClientConfig {
+export interface WSClientConfig {
   url?: string;
   autoReconnect?: boolean;
   reconnectInterval?: number;
@@ -40,6 +40,7 @@ export class WSClient {
   constructor(config: WSClientConfig = {}) {
     this.url = config.url || this.getDefaultUrl();
     this.config = {
+      url: this.url, // 确保 url 存在
       autoReconnect: true,
       reconnectInterval: 3000,
       maxReconnectAttempts: 10,

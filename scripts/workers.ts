@@ -3,6 +3,19 @@
 // 在独立的进程中运行任务队列 Worker
 // ============================================
 
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+// 加载环境变量
+const envPath = path.resolve(process.cwd(), '.env.local');
+const result = dotenv.config({ path: envPath });
+
+if (result.error) {
+  console.warn('⚠️  警告: .env.local 加载失败，使用系统环境变量');
+} else {
+  console.log('✅ 环境变量已加载:', envPath);
+}
+
 import { queueManager, QUEUE_NAMES } from '../lib/queue/bullmq';
 import { videoJobProcessor } from '../lib/queue/workers';
 import { wsServer } from '../lib/ws/server';
