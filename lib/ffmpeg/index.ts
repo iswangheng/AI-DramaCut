@@ -36,6 +36,12 @@ export {
   batchConcatVideos,
 } from "./concat";
 
+export {
+  mixAudioMultitrack,
+  createStandardMix,
+  batchMixAudioMultitrack,
+} from "./multitrack-audio";
+
 export type {
   VideoMetadata,
   TrimOptions,
@@ -55,3 +61,10 @@ export type {
   ConcatOptions,
   ConcatResult,
 } from "./concat";
+
+export type {
+  AudioTrack,
+  AudioTrackType,
+  MultitrackMixOptions,
+  MixResult,
+} from "./multitrack-audio";

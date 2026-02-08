@@ -491,6 +491,81 @@ npx tsx scripts/test-concat.ts ./seg1.mp4 ./seg2.mp4 --width 1280 --height 720
 
 ---
 
+### 9. 多轨道音频混合功能（2025-02-08）
+Agent 3 - 视频处理核心开发
+
+#### 核心功能
+- ✅ **四轨道混合** - 支持解说配音、原音、BGM、音效同时混合
+- ✅ **灵活配置** - 自定义音量、延迟开始、裁剪时长
+- ✅ **进度监控** - 实时反馈混合进度
+- ✅ **标准预设** - createStandardMix 快速创建四轨道混合
+
+#### 文件结构
+```
+lib/ffmpeg/
+├── multitrack-audio.ts     # 多轨道音频混合模块
+├── utils.ts                # 基础工具（双轨道混合）
+├── progress.ts             # 进度监控
+├── types.ts                # 类型定义
+└── index.ts                # 导出入口
+
+scripts/
+└── test-multitrack-audio.ts # 测试脚本
+
+docs/
+└── MULTITRACK-AUDIO.md      # 功能文档
+```
+
+#### 使用示例
+```typescript
+// 标准四轨道混合
+const result = await createStandardMix({
+  videoPath: './video.mp4',
+  voiceoverPath: './voiceover.mp3',
+  bgmPath: './bgm.mp3',
+  sfxPath: './sfx.mp3',
+  outputPath: './output.mp4',
+  voiceoverVolume: 1.0,
+  bgmVolume: 0.3,
+  sfxVolume: 0.5,
+  totalDuration: 180,
+  onProgress: (progress) => console.log(`${progress.toFixed(1)}%`)
+});
+```
+
+#### 四轨道配置
+| 轨道 | 类型 | 默认音量 | 用途 |
+|------|------|---------|------|
+| 轨道 1 | voiceover | 100% | ElevenLabs 解说配音（主声音） |
+| 轨道 2 | original | 15% | 原始视频环境音（保留氛围） |
+| 轨道 3 | bgm | 30% | BGM 背景音乐（情绪渲染） |
+| 轨道 4 | sfx | 50% | 音效/转场音（特效声音） |
+
+#### 测试命令
+```bash
+# 三轨道混合（解说 + BGM + 音效）
+npx tsx scripts/test-multitrack-audio.ts ./video.mp4 \
+  --voiceover ./voiceover.mp3 \
+  --bgm ./bgm.mp3 \
+  --sfx ./sfx.mp3
+
+# 自定义音量
+npx tsx scripts/test-multitrack-audio.ts ./video.mp4 \
+  --voiceover ./voiceover.mp3 \
+  --bgm ./bgm.mp3 \
+  --voiceover-volume 0.8 \
+  --bgm-volume 0.4
+```
+
+#### 技术亮点
+- **四轨道支持**: 同时混合解说、原音、BGM、音效
+- **灵活音量控制**: 每个轨道独立音量调整
+- **时间控制**: 支持延迟开始和裁剪时长
+- **进度监控**: 实时反馈混合进度
+- **快速混合**: 使用 -c:v copy，视频不重新编码
+
+---
+
 ## 📚 参考资源
 
 - **Remotion 官方文档**: https://www.remotion.dev/
