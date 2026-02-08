@@ -50,11 +50,17 @@ lib/api/
 └── types.ts            # API 类型定义
 ```
 
+**已完成**:
+- ✅ Gemini 3 API 封装 (analyzeVideo, findHighlights, extractStorylines)
+- ✅ ElevenLabs TTS 集成 (textToSpeech, generateNarration)
+- ✅ ViralMoment 接口修复（符合 types/api-contracts.ts）
+- ✅ TTSResult 接口增强（audioPath, durationMs, wordTimings）
+- ✅ HTTP API 路由: /api/gemini/detect-viral-moments, /api/elevenlabs/generate-narration
+
 **当前任务**:
-- 🔄 Gemini 3 API 封装
-- 📋 待办：ElevenLabs TTS 集成
 - 📋 待办：流式响应处理
 - 📋 待办：错误重试机制
+- 📋 待办：完善 wordTimings 提取（当前是临时方案）
 
 **依赖配置**:
 ```bash
@@ -407,6 +413,17 @@ git commit -m "chore: 解决 <Agent A> 和 <Agent B> 的冲突"
 - 影响：`detectShots()` 功能无法完整实现
 - 需要 Agent 4 立即处理（详见"当前阻塞项"部分）
 
+**19:15** - Agent 2 完成接口契约修复
+- ✅ 修复 ViralMoment 接口，添加 suggestedStartMs, suggestedEndMs, confidence 字段
+- ✅ 增强 TTSResult 接口，添加 audioPath, durationMs, wordTimings, format 字段
+- ✅ 实现 detectViralMoments() 方法，返回符合接口契约的 ViralMoment[]
+- ✅ 实现 generateNarration() 方法，支持文件保存和 wordTimings 提取
+- ✅ 创建 HTTP API 路由：
+  - POST /api/gemini/detect-viral-moments
+  - POST /api/elevenlabs/generate-narration
+- ✅ 创建接口契约测试脚本 (scripts/test-api-contracts.ts)
+- 提交: 001f321
+
 ---
 
 ## 🔧 快速参考
@@ -452,12 +469,15 @@ git push origin main
 
 ### Agent UI 被阻塞：
 - ✅ ~~等待 Agent Video 提供视频元数据 API~~（已完成 `/api/video/metadata`）
+- ✅ ~~等待 Agent API 提供 `detectViralMoments()` 函数~~（已完成 `/api/gemini/detect-viral-moments`）
 - ❌ 等待 Agent Video 提供 `uploadVideo()` 函数
-- ❌ 等待 Agent API 提供 `detectViralMoments()` 函数（需要 shots 数据）
+- ❌ 等待 Agent Video 完成 shots 数据（detectViralMoments 需要基于 shots 分析）
 
 ### Agent API 被阻塞：
-- ✅ 无阻塞
+- ✅ ~~等待实现 detectViralMoments() 函数~~（已完成）
+- ✅ ~~等待实现 generateNarration() 函数~~（已完成）
 - 📋 建议优先实现：完整视频分析功能（需要 Agent Video 的 shots 数据）
+- 📋 可选优化：完善 wordTimings 提取（当前使用文本分割作为临时方案）
 
 ### Agent Video 被阻塞：
 - ❌ **`detectShots()` 功能被阻塞**
