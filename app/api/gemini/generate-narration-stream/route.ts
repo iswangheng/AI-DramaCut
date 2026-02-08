@@ -12,12 +12,7 @@ import { createStreamResponseHelper } from '@/lib/api/utils/streaming';
  * POST /api/gemini/generate-narration-stream
  * 流式生成解说文案（Server-Sent Events）
  */
-export async function request(request: NextRequest) {
-  // 只支持 POST 请求
-  if (request.method !== 'POST') {
-    return new Response('Method Not Allowed', { status: 405 });
-  }
-
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { storyline, style } = body;
@@ -85,6 +80,3 @@ export async function request(request: NextRequest) {
     );
   }
 }
-
-// 导出为 POST 方法处理器
-export const POST = request;
