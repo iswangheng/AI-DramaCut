@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { geminiClient } from '@/lib/api';
+import { GeminiClient } from '@/lib/api/gemini';
 import type { Storyline } from '@/lib/api';
 
 /**
@@ -43,7 +43,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 调用 Gemini API
-    const response = await geminiClient.generateNarration(storyline, style);
+    const client = new GeminiClient();
+    const response = await client.generateNarration(storyline, style);
 
     if (!response.success || !response.data) {
       return NextResponse.json(

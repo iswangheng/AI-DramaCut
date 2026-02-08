@@ -96,6 +96,7 @@ function RecapContent() {
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProject, setSelectedProject] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // 步骤 2: 故事线数据
   const [storylines, setStorylines] = useState<Storyline[]>([]);

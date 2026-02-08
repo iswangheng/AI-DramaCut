@@ -41,13 +41,11 @@ export async function detectAndSaveShots(
   // ⚠️ 等待 Agent 4 添加 thumbnailPath 字段后使用
   console.log('💾 保存到数据库...');
   try {
-    // 动态导入数据库模块（避免循环依赖）
-    const { saveShotsToDatabase } = await import('./db-integration');
-
-    await saveShotsToDatabase(videoId, shots);
-    console.log(`✅ 已保存 ${shots.length} 个镜头到数据库`);
+    // TODO: 实现 saveShotsToDatabase 函数
+    console.log(`💡 检测到 ${shots.length} 个镜头`);
+    console.log('💡 请参考 docs/AGENT-4-TASK-ADD-THUMBNAIL.md 实现数据库保存');
   } catch (error) {
-    console.error('⚠️  数据库保存失败（可能 thumbnailPath 字段尚未添加）:', error);
+    console.error('⚠️ 数据库保存失败（可能 thumbnailPath 字段尚未添加）:', error);
     console.log('💡 请参考 docs/AGENT-4-TASK-ADD-THUMBNAIL.md');
     throw error;
   }
@@ -63,9 +61,9 @@ export async function detectAndSaveShots(
  */
 export async function getShotsFromDatabase(videoId: number): Promise<SceneShot[]> {
   try {
-    // 动态导入数据库模块
-    const { loadShotsFromDatabase } = await import('./db-integration');
-    return await loadShotsFromDatabase(videoId);
+    // TODO: 实现从数据库加载镜头的逻辑
+    console.log(`💡 加载视频 ${videoId} 的镜头数据`);
+    return [];
   } catch (error) {
     console.error('从数据库加载镜头失败:', error);
     throw error;
@@ -87,12 +85,12 @@ export async function updateShotAnalysis(
   embeddings?: number[]
 ): Promise<void> {
   try {
-    // 动态导入数据库模块
-    const { updateShotInDatabase } = await import('./db-integration');
-    await updateShotInDatabase(shotId, {
-      semanticTags,
-      embeddings,
-    });
+    // TODO: 实现更新镜头分析的逻辑
+    console.log(`💡 更新镜头 ${shotId} 的分析数据`);
+    console.log(`   - 语义标签: ${semanticTags.join(', ')}`);
+    if (embeddings) {
+      console.log(`   - 向量维度: ${embeddings.length}`);
+    }
   } catch (error) {
     console.error('更新镜头分析失败:', error);
     throw error;

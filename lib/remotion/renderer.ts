@@ -8,7 +8,6 @@
 
 import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
-import { webpackOverride } from 'remotion/dev/webpack-override';
 import { join } from 'path';
 import { existsSync } from 'fs';
 
@@ -213,12 +212,12 @@ export async function renderRemotionVideo(
   let lastProgress = 0;
   const result = await renderMedia({
     serveUrl: bundleLocation,
-    compositionId,
+    composition,
     inputProps,
     codec,
     outputLocation: outputPath,
     overwrite,
-    onProgress: ({ progress, renderedFrames, encodedFrames, renderedDurationInMilliseconds }) => {
+    onProgress: ({ progress, renderedFrames, encodedFrames }) => {
       const progressPercent = progress * 100;
 
       // 只在进度有明显变化时更新（每 1%）
@@ -231,26 +230,20 @@ export async function renderRemotionVideo(
         }
 
         if (onProgress) {
+          const renderedDurationInSeconds = renderedFrames / composition.fps;
           onProgress(
             progressPercent,
             renderedFrames,
             composition.durationInFrames,
-            renderedDurationInMilliseconds / 1000
+            renderedDurationInSeconds
           );
         }
       }
     },
     // 并发渲染可以显著提高速度，但需要更多内存
     concurrency,
-    // 输出配置
-    fps,
-    width,
-    height,
-    // JPEG 质量（用于预览）
-    jpegQuality,
-    // CRF 和预设（用于最终输出）
+    // CRF（用于最终输出）
     crf,
-    preset,
   });
 
   const renderTime = Date.now() - startTime;
@@ -267,7 +260,7 @@ export async function renderRemotionVideo(
   console.log(`   输出文件: ${outputPath}`);
   console.log(`   文件大小: ${(size / 1024 / 1024).toFixed(2)} MB`);
   console.log(`   渲染耗时: ${(renderTime / 1000).toFixed(2)} 秒`);
-  console.log(`   渲染速度: ${(result.size / 1024 / 1024 / (renderTime / 1000)).toFixed(2)} MB/s`);
+  console.log(`   渲染速度: ${(size / 1024 / 1024 / (renderTime / 1000)).toFixed(2)} MB/s`);
 
   return {
     outputPath,

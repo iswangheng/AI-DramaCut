@@ -5,7 +5,7 @@
  * 使用音频特征分析来估计词级时间戳
  */
 
-import { Word } from '../../types/api-contracts';
+import { Word } from '../../../types/api-contracts';
 
 /**
  * 语音活动检测（VAD）结果
@@ -147,7 +147,7 @@ export function alignWordsHybrid(
   let globalTimeMs = 0;
 
   sentences.forEach(sentence => {
-    const words = sentence.text.split(/\s+/).filter(w => w.length > 0);
+    const words = sentence.split(/\s+/).filter(w => w.length > 0);
 
     if (words.length === 0) {
       return;

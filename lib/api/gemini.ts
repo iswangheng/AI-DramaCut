@@ -497,19 +497,20 @@ ${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)} - ${th
     const viralMoments: ViralMoment[] = highlightsResponse.data.map((highlight) => {
       const timestampMs = highlight.timestampMs;
       const suggestedDuration = highlight.suggestedDuration || 60; // 默认 60 秒
+      const viralScore = highlight.viralScore || 5; // 默认 5
 
       return {
         timestampMs,
-        type: this.mapCategoryToType(highlight.category), // 映射 category 到 type
-        confidence: highlight.viralScore / 10, // 转换 0-10 到 0-1
-        description: highlight.reason,
+        type: this.mapCategoryToType(highlight.category || 'highlight'), // 映射 category 到 type
+        confidence: viralScore / 10, // 转换 0-10 到 0-1
+        description: highlight.description,
         suggestedStartMs: timestampMs, // 开始时间
         suggestedEndMs: timestampMs + (suggestedDuration * 1000), // 结束时间（毫秒）
 
         // 保留原有字段
-        viralScore: highlight.viralScore,
+        viralScore,
         category: highlight.category,
-        suggestedDuration: highlight.suggestedDuration,
+        suggestedDuration,
       };
     });
 
@@ -691,7 +692,7 @@ ${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)} - ${th
     const response = await this.callApi(prompt, systemInstruction);
 
     if (!response.success || !response.data) {
-      return response;
+      return response as GeminiResponse<string>;
     }
 
     const fullText = response.data as string;
@@ -715,7 +716,7 @@ ${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)} - ${th
       });
     }
 
-    return response;
+    return response as GeminiResponse<string>;
   }
 
   /**
@@ -848,4 +849,3 @@ ${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)}] ${s.d
 // ============================================
 // 导出单例实例
 // ============================================
-export const geminiClient = new GeminiClient();

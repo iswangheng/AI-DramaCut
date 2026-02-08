@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { geminiClient } from '@/lib/api';
+import { GeminiClient } from '@/lib/api/gemini';
 import type { ViralMoment, Storyline } from '@/types/api-contracts';
 
 /**
@@ -27,7 +27,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 调用 Gemini API
-    const response = await geminiClient.detectViralMoments(videoPath, {
+    const client = new GeminiClient();
+    const response = await client.detectViralMoments(videoPath, {
       minConfidence,
       maxResults,
     });

@@ -348,14 +348,29 @@ class DatabaseClient {
 
 const dbClient = new DatabaseClient();
 
-// 导出 Drizzle 客户端
-export const db = dbClient.getDb();
+// 导出数据库客户端实例
+export { dbClient };
+
+// 导出 Drizzle 客户端（懒加载）
+// 使用 getter 确保只在访问时才连接数据库
+let _db: ReturnType<typeof dbClient.getDb> | null = null;
+
+export const db = new Proxy({} as any, {
+  get(target, prop) {
+    if (!_db) {
+      _db = dbClient.getDb();
+    }
+    return _db[prop];
+  },
+  set(target, prop, value) {
+    if (_db) {
+      _db[prop] = value;
+    }
+  },
+});
 
 // 导出 Schema
 export * from './schema';
-
-// 导出数据库客户端实例
-export { dbClient };
 
 // 导出数据库实例的快捷访问方式
 export default db;

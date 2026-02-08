@@ -34,3 +34,11 @@ export type {
 
 // 项目管理 API 类型
 export type { ProjectWithStats, ApiResponse } from './projects';
+
+// 数据库类型（重新导出）
+export type {
+  Video,
+  NewVideo,
+  Project,
+  NewProject,
+} from '@/lib/db';

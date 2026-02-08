@@ -56,7 +56,7 @@ async function testTrimProgress(videoPath: string, outputDir: string) {
     totalDuration: metadata.duration,
     onProgress: (progress, currentTime, totalTime) => {
       const bar = '█'.repeat(Math.floor(progress / 2)) + '░'.repeat(50 - Math.floor(progress / 2));
-      process.stdout.write(`\r[${bar}] ${progress.toFixed(1)}% (${currentTime.toFixed(1)}s / ${totalDuration.toFixed(1)}s)`);
+      process.stdout.write(`\r[${bar}] ${progress.toFixed(1)}% (${currentTime.toFixed(1)}s / ${totalTime.toFixed(1)}s)`);
     },
   });
 
@@ -85,7 +85,7 @@ async function testMixProgress(videoPath: string, outputDir: string) {
     totalDuration: metadata.duration,
     onProgress: (progress, currentTime, totalTime) => {
       const bar = '█'.repeat(Math.floor(progress / 2)) + '░'.repeat(50 - Math.floor(progress / 2));
-      process.stdout.write(`\r[${bar}] ${progress.toFixed(1)}% (${currentTime.toFixed(1)}s / ${totalDuration.toFixed(1)}s)`);
+      process.stdout.write(`\r[${bar}] ${progress.toFixed(1)}% (${currentTime.toFixed(1)}s / ${totalTime.toFixed(1)}s)`);
     },
   });
 
@@ -112,7 +112,7 @@ async function testNormalizeProgress(videoPath: string, outputDir: string) {
     totalDuration: metadata.duration,
     onProgress: (progress, currentTime, totalTime) => {
       const bar = '█'.repeat(Math.floor(progress / 2)) + '░'.repeat(50 - Math.floor(progress / 2));
-      process.stdout.write(`\r[${bar}] ${progress.toFixed(1)}% (${currentTime.toFixed(1)}s / ${totalDuration.toFixed(1)}s)`);
+      process.stdout.write(`\r[${bar}] ${progress.toFixed(1)}% (${currentTime.toFixed(1)}s / ${totalTime.toFixed(1)}s)`);
     },
   });
 

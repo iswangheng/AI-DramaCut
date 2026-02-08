@@ -5,8 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { geminiClient } from '@/lib/api';
-import { createStreamResponseHelper } from '@/lib/api/utils/streaming';
+import { GeminiClient } from '@/lib/api/gemini';
 
 /**
  * POST /api/gemini/generate-narration-stream
@@ -43,26 +42,63 @@ export async function POST(request: NextRequest) {
     }
 
     // 创建流式响应
-    return createStreamResponseHelper(
-      async (onChunk) => {
-        // 调用 Gemini API 流式方法
-        const response = await geminiClient.generateNarrationStream(
-          storyline,
-          style,
-          onChunk
-        );
+    const encoder = new TextEncoder();
 
-        if (!response.success) {
-          onChunk({
-            text: '',
-            done: true,
-            index: -1,
-            error: response.error || '生成失败',
-          });
-        }
-      },
-      () => {
-        console.log(`✅ 流式生成完成: ${style}`);
+    return new Response(
+      new ReadableStream({
+        async start(controller) {
+          try {
+            const client = new GeminiClient();
+
+            // 调用 Gemini API 流式方法
+            const response = await client.generateNarrationStream(
+              storyline,
+              style,
+              async (chunk) => {
+                // 发送 SSE 格式的数据
+                const data = `data: ${JSON.stringify(chunk)}\n\n`;
+                controller.enqueue(encoder.encode(data));
+
+                if (chunk.error) {
+                  controller.close();
+                }
+              }
+            );
+
+            if (!response.success) {
+              const errorChunk = {
+                text: '',
+                done: true,
+                index: -1,
+                error: response.error || '生成失败',
+              };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorChunk)}\n\n`));
+            }
+
+            // 发送完成信号
+            controller.enqueue(encoder.encode('data: {"done":true}\n\n'));
+            controller.close();
+
+            console.log(`✅ 流式生成完成: ${style}`);
+          } catch (error) {
+            console.error('流式生成错误:', error);
+            const errorChunk = {
+              text: '',
+              done: true,
+              index: -1,
+              error: error instanceof Error ? error.message : '未知错误',
+            };
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorChunk)}\n\n`));
+            controller.close();
+          }
+        },
+      }),
+      {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
       }
     );
   } catch (error) {

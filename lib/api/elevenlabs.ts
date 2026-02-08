@@ -506,22 +506,24 @@ export class ElevenLabsClient {
   ): Promise<ElevenLabsResponse<{
     audioPath: string;
     durationMs: number;
-    wordTimings: import('../types/api-contracts').Word[];
+    wordTimings: import('../../types/api-contracts').Word[];
     format: string;
   }>> {
     const {
       voice = 'eleven_multilingual_v2',
       model = 'eleven_multilingual_v2',
       stability = 0.5,
-      outputPath
+      outputPath: initialOutputPath
     } = options || {};
+
+    let outputPath = initialOutputPath;
 
     try {
       // 1. 调用 TTS 生成音频
       const response = await this.textToSpeech({
         text,
-        voice,
-        model,
+        voiceId: voice,
+        modelId: model,
         stability,
       });
 
@@ -575,7 +577,7 @@ export class ElevenLabsClient {
       // 优先尝试从 API 获取真实的 timestamps
       // 如果不可用，则使用智能对齐算法
 
-      let wordTimings: import('../types/api-contracts').Word[];
+      let wordTimings: import('../../types/api-contracts').Word[];
 
       // TODO: 如果 ElevenLabs 返回了 alignment 数据，优先使用
       // if (result.alignment && result.alignment.chars) {
@@ -625,7 +627,7 @@ export class ElevenLabsClient {
     text: string,
     totalDurationMs: number,
     useSmartAlignment: boolean = false
-  ): import('../types/api-contracts').Word[] {
+  ): import('../../types/api-contracts').Word[] {
     if (useSmartAlignment) {
       // 使用智能对齐算法（基于音节和标点符号）
       return alignWordsSmart(text, totalDurationMs);
@@ -655,7 +657,7 @@ export class ElevenLabsClient {
   private parseElevenLabsAlignment(
     alignment: any,
     text: string
-  ): import('../types/api-contracts').Word[] {
+  ): import('../../types/api-contracts').Word[] {
     // TODO: 实现 ElevenLabs alignment 数据解析
     // 这取决于 API 实际返回的数据格式
     return [];
@@ -665,4 +667,3 @@ export class ElevenLabsClient {
 // ============================================
 // 导出单例实例
 // ============================================
-export const elevenlabsClient = new ElevenLabsClient();

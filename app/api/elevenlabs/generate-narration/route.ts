@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { elevenlabsClient } from '@/lib/api';
+import { ElevenLabsClient } from '@/lib/api/elevenlabs';
 
 /**
  * POST /api/elevenlabs/generate-narration
@@ -24,7 +24,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 调用 ElevenLabs API
-    const response = await elevenlabsClient.generateNarration(text, {
+    const client = new ElevenLabsClient();
+    const response = await client.generateNarration(text, {
       voice,
       model,
       stability,

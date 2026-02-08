@@ -14,6 +14,11 @@ export interface StreamChunk {
 export type StreamCallback = (chunk: StreamChunk) => void | Promise<void>;
 
 /**
+ * 流处理器类型 - 接收回调函数并异步处理流
+ */
+export type StreamProcessor = (callback: StreamCallback) => void | Promise<void>;
+
+/**
  * Server-Sent Events (SSE) 响应格式
  */
 export class SSEStream {
@@ -31,19 +36,21 @@ export class SSEStream {
    * 创建流式响应
    */
   createStreamResponse(
-    onStream: StreamCallback,
+    onStream: StreamProcessor,
     onComplete?: () => void
   ): ReadableStream<Uint8Array> {
     let index = 0;
+    const encoder = this.encoder;
+    const formatEvent = this.formatEvent.bind(this);
 
     return new ReadableStream({
       async start(controller) {
         try {
           await onStream((chunk) => {
-            controller.enqueue(this.formatEvent('message', chunk));
+            controller.enqueue(formatEvent('message', chunk));
 
             if (chunk.done) {
-              controller.enqueue(this.formatEvent('done', { index }));
+              controller.enqueue(formatEvent('done', { index }));
             }
           });
 
@@ -124,7 +131,7 @@ export async function* createMockStream(
  * Next.js API Route 流式响应辅助函数
  */
 export function createStreamResponseHelper(
-  onStream: StreamCallback,
+  onStream: StreamProcessor,
   onComplete?: () => void
 ): Response {
   const stream = new SSEStream().createStreamResponse(onStream, onComplete);

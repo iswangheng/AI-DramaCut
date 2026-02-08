@@ -7,7 +7,6 @@
 
 import { execSync } from 'child_process';
 import { existsSync, statSync } from 'fs';
-import { getVideoMetadata as getRemotionMetadata } from '@remotion/media-utils';
 import type { VideoMetadata } from '@/types/api-contracts';
 
 /**
@@ -65,10 +64,7 @@ export async function getMetadata(videoPath: string): Promise<VideoMetadata> {
     throw new Error(`视频文件不存在: ${videoPath}`);
   }
 
-  // 2. 使用 Remotion 获取基础元数据（快速）
-  const remotionMetadata = await getRemotionMetadata(videoPath);
-
-  // 3. 使用 ffprobe 获取详细信息（包括比特率）
+  // 2. 使用 ffprobe 获取详细信息（包括比特率）
   const ffprobeData = getFFProbeMetadata(videoPath);
 
   // 4. 提取视频流信息
@@ -90,15 +86,18 @@ export async function getMetadata(videoPath: string): Promise<VideoMetadata> {
   // 6. 获取文件大小
   const size = statSync(videoPath).size;
 
-  // 7. 组装完整的元数据对象（符合接口契约）
+  // 7. 解析时长（ffprobe 返回秒数）
+  const duration = parseFloat(ffprobeData.format.duration);
+
+  // 8. 组装完整的元数据对象（符合接口契约）
   const metadata: VideoMetadata = {
-    duration: remotionMetadata.durationInSeconds,
-    width: remotionMetadata.width,
-    height: remotionMetadata.height,
-    fps: fps,
+    duration,
+    width: videoStream.width || 1920,
+    height: videoStream.height || 1080,
+    fps,
     bitrate: parseInt(ffprobeData.format.bit_rate) || 0,
     codec: videoStream.codec_name,
-    size: size,
+    size,
   };
 
   return metadata;

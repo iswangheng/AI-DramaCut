@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { geminiClient } from '@/lib/api';
+import { GeminiClient } from '@/lib/api/gemini';
 
 /**
  * POST /api/gemini/extract-storylines
@@ -24,7 +24,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 调用 Gemini API
-    const response = await geminiClient.extractStorylines(videoPath, minCount);
+    const client = new GeminiClient();
+    const response = await client.extractStorylines(videoPath, minCount);
 
     if (!response.success || !response.data) {
       return NextResponse.json(

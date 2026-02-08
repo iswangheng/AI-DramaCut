@@ -31,6 +31,7 @@ interface QueueJob {
   status: "waiting" | "active" | "completed" | "failed" | "delayed";
   result?: string;
   error?: string;
+  progress?: number;
   processedAt?: Date;
   completedAt?: Date;
   createdAt: Date;

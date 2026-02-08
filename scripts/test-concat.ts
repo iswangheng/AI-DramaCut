@@ -76,7 +76,8 @@ function parseArgs(): TestOptions {
     const arg = args[i];
 
     if (arg === '--transition') {
-      options.transition = (args[i + 1] as 'fade' | 'crossfade' | 'null') || 'fade';
+      const transitionValue = args[i + 1];
+      options.transition = (transitionValue === 'null' ? null : (transitionValue as 'fade' | 'crossfade')) || 'fade';
       i += 2;
     } else if (arg === '--transition-duration') {
       options.transitionDurationMs = parseInt(args[i + 1]) || 500;
@@ -143,7 +144,6 @@ async function main() {
   }
 
   // 创建输出目录
-  const { mkdirSync } = await import('path');
   const { dirname } = await import('path');
   const { promises } = await import('fs');
   await promises.mkdir(dirname(options.outputPath), { recursive: true });

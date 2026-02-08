@@ -20,12 +20,12 @@ import { projectsApi, videosApi, type Video } from "@/lib/api";
 interface Project {
   id: number;
   name: string;
-  description?: string;
+  description: string | null | undefined;
   videoCount: number;
   totalDuration: string;
   status: "ready" | "processing" | "error";
   progress: number;
-  currentStep?: string;
+  currentStep: string | null | undefined;
   createdAt: Date;
 }
 
@@ -208,7 +208,7 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
 
       {/* 操作按钮 */}
       <div className="mb-6 flex gap-3">
-        <UploadVideoDialog onUpload={handleUploadVideos} />
+        <UploadVideoDialog projectId={project.id} onUploadComplete={loadData} />
         <Button variant="outline">查看剧情树</Button>
       </div>
 
@@ -297,7 +297,7 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
         <div className="text-center py-16">
           <div className="text-6xl mb-4">📹</div>
           <p className="text-muted-foreground text-lg mb-4">还没有上传任何视频</p>
-          <UploadVideoDialog onUpload={handleUploadVideos} />
+          <UploadVideoDialog projectId={project.id} onUploadComplete={loadData} />
         </div>
       )}
     </div>

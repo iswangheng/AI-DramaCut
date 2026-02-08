@@ -5,6 +5,8 @@
  * 支持多个视频片段的组合、转场效果和字幕叠加
  */
 
+"use client";
+
 import React, { useCallback, useState } from 'react';
 import {
   AbsoluteFill,
@@ -268,15 +270,15 @@ const Clip: React.FC<ClipProps> = ({ clip, index, totalClips, globalStyle }) => 
               }}
             >
               <KaraokeSentence
-                sentence={subtitle}
-                style={{
-                  fontSize: globalStyle.fontSize || 60,
-                  color: globalStyle.fontColor || 'white',
-                  textShadow: `${globalStyle.outlineSize || 5}px ${
-                    globalStyle.outlineColor || 'black'
-                  }`,
-                }}
+                text={subtitle.text}
+                words={subtitle.words || []}
+                sentenceStartMs={subtitle.startMs}
+                fontSize={globalStyle.fontSize || 60}
+                fontColor={globalStyle.fontColor || 'white'}
                 highlightColor={globalStyle.highlightColor || '#FFE600'}
+                outlineColor={globalStyle.outlineColor || 'black'}
+                outlineSize={globalStyle.outlineSize || 5}
+                subtitleY={globalStyle.subtitleY || 80}
               />
             </AbsoluteFill>
           </Sequence>

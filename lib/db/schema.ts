@@ -269,3 +269,17 @@ export type NewRecapSegment = typeof recapSegments.$inferInsert;
 
 export type QueueJob = typeof queueJobs.$inferSelect;
 export type NewQueueJob = typeof queueJobs.$inferInsert;
+
+// ============================================
+// Schema 对象统一导出
+// ============================================
+export const schema = {
+  projects,
+  videos,
+  shots,
+  storylines,
+  highlights,
+  recapTasks,
+  recapSegments,
+  queueJobs,
+};

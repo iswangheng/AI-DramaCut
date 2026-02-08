@@ -6,8 +6,8 @@
  * 测试 Gemini 和 ElevenLabs API 是否符合 types/api-contracts.ts 接口契约
  */
 
-import { geminiClient } from '../lib/api';
-import { elevenlabsClient } from '../lib/api';
+import { GeminiClient } from '../lib/api/gemini';
+import { ElevenLabsClient } from '../lib/api/elevenlabs';
 
 interface ViralMoment {
   timestampMs: number;
@@ -129,6 +129,7 @@ async function testAPIConnection() {
   // 测试 ElevenLabs 连接
   console.log('测试 ElevenLabs API...');
   try {
+    const elevenlabsClient = new ElevenLabsClient();
     const voicesResponse = await elevenlabsClient.getVoices();
     if (voicesResponse.success && voicesResponse.data) {
       console.log(`✅ ElevenLabs API 连接成功`);

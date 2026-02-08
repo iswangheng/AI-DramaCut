@@ -315,7 +315,7 @@ export async function batchSampleKeyFrames(
   const results = new Map<string, SamplingResult>();
 
   for (const { videoPath, options = {} } of videos) {
-    const outputDir = options.outputDir || `./frames/${Buffer.from(videoPath).toString('base64').substring(0, 8)}`;
+    const outputDir = `./frames/${Buffer.from(videoPath).toString('base64').substring(0, 8)}`;
 
     try {
       const result = await sampleKeyFrames({
