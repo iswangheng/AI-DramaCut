@@ -8,8 +8,9 @@ import { createServer } from 'http';
 import { parse } from 'url';
 import next from 'next';
 import { wsServer } from './ws/server';
-import { queueManager } from './queue';
+import { queueManager, QUEUE_NAMES } from './queue';
 import { initializeApp } from './db/init';
+import { videoJobProcessor } from './queue/workers';
 
 // ============================================
 // 服务器配置
@@ -52,12 +53,25 @@ app.prepare().then(async () => {
   // 这里只需要确认它正在运行
   console.log('✅ WebSocket 服务器已集成');
 
-  // 4. 启动视频处理 Worker
+  // 4. 启动所有队列 Workers
   try {
-    queueManager.createVideoWorker();
-    console.log('✅ 视频处理 Worker 已启动');
+    // 启动视频处理 Worker（镜头检测）
+    queueManager.createWorker(QUEUE_NAMES.videoProcessing, videoJobProcessor);
+    console.log(`✅ 视频处理 Worker 已启动: ${QUEUE_NAMES.videoProcessing}`);
+
+    // 启动 Gemini 分析 Worker
+    queueManager.createWorker(QUEUE_NAMES.geminiAnalysis, videoJobProcessor);
+    console.log(`✅ Gemini 分析 Worker 已启动: ${QUEUE_NAMES.geminiAnalysis}`);
+
+    // 启动 TTS 生成 Worker
+    queueManager.createWorker(QUEUE_NAMES.ttsGeneration, videoJobProcessor);
+    console.log(`✅ TTS 生成 Worker 已启动: ${QUEUE_NAMES.ttsGeneration}`);
+
+    // 启动视频渲染 Worker
+    queueManager.createWorker(QUEUE_NAMES.videoRender, videoJobProcessor);
+    console.log(`✅ 视频渲染 Worker 已启动: ${QUEUE_NAMES.videoRender}`);
   } catch (error) {
-    console.warn('⚠️  视频处理 Worker 启动失败（可能 Redis 未运行）:', error);
+    console.warn('⚠️  Workers 启动失败（可能 Redis 未运行）:', error);
   }
 
   // 5. 监听端口

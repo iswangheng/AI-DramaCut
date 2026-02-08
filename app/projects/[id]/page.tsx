@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { UploadVideoDialog } from "@/components/upload-video-dialog";
+import { EditProjectDialog } from "@/components/edit-project-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,

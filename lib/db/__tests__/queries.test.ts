@@ -35,6 +35,7 @@ describe('Database Queries - 视频管理', () => {
         width: 1920,
         height: 1080,
         fps: 30,
+        projectId: 1, // 添加必需的 projectId
         status: 'uploading',
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -193,6 +194,7 @@ describe('Database Queries - 解说管理', () => {
       width: 1920,
       height: 1080,
       fps: 30,
+      projectId: 1, // 添加必需的 projectId
       status: 'ready',
       createdAt: new Date(),
       updatedAt: new Date(),

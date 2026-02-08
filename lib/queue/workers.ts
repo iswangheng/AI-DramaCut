@@ -111,6 +111,9 @@ async function processTrimJob(job: Job<TrimJobData>) {
 async function processAnalyzeJob(job: Job<AnalyzeJobData>) {
   const { videoPath, videoId, sampleFrames } = job.data;
 
+  // 更新视频状态为 analyzing
+  await queries.video.updateStatus(videoId, 'analyzing');
+
   // 更新进度: 10%
   await job.updateProgress(10);
   wsServer.sendProgress(job.id!, 10, '开始分析视频');
@@ -119,6 +122,8 @@ async function processAnalyzeJob(job: Job<AnalyzeJobData>) {
   const response = await geminiClient.analyzeVideo(videoPath, sampleFrames);
 
   if (!response.success || !response.data) {
+    // 标记视频为错误状态
+    await queries.video.updateError(videoId, response.error || '视频分析失败');
     throw new Error(response.error || '视频分析失败');
   }
 
@@ -166,6 +171,9 @@ async function processAnalyzeJob(job: Job<AnalyzeJobData>) {
     await queries.highlight.createMany(highlightsData);
   }
 
+  // 更新视频状态为 ready（分析完成）
+  await queries.video.updateStatus(videoId, 'ready');
+
   // 更新进度: 100%
   await job.updateProgress(100);
   wsServer.sendComplete(job.id!, {
@@ -187,6 +195,9 @@ async function processAnalyzeJob(job: Job<AnalyzeJobData>) {
 async function processExtractShotsJob(job: Job<ExtractShotsJobData>) {
   const { videoPath, videoId } = job.data;
 
+  // 更新视频状态为 processing
+  await queries.video.updateStatus(videoId, 'processing');
+
   // 更新进度: 10%
   await job.updateProgress(10);
   wsServer.sendProgress(job.id!, 10, '开始检测镜头');
@@ -199,6 +210,8 @@ async function processExtractShotsJob(job: Job<ExtractShotsJobData>) {
   const response = await geminiClient.analyzeVideo(videoPath);
 
   if (!response.success || !response.data) {
+    // 标记视频为错误状态
+    await queries.video.updateError(videoId, response.error || '镜头检测失败');
     throw new Error(response.error || '镜头检测失败');
   }
 

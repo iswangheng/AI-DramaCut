@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { queries } from '@/lib/db';
+import { queueManager, QUEUE_NAMES } from '@/lib/queue/bullmq';
 
 /**
  * GET /api/projects/:id/videos
@@ -131,9 +132,49 @@ export async function POST(
       status: 'uploading',
     });
 
+    // ============================================
+    // 自动化处理流程：触发任务队列
+    // ============================================
+
+    try {
+      // 1. 触发镜头检测任务（FFmpeg 镜头切分）
+      await queueManager.addJob(
+        QUEUE_NAMES.videoProcessing,
+        'extract-shots',
+        {
+          type: 'extract-shots',
+          videoPath: filePath,
+          videoId: video.id,
+        }
+      );
+
+      console.log(`✅ 镜头检测任务已加入队列: Video ID ${video.id}`);
+
+      // 2. 触发 Gemini 分析任务（深度理解）
+      await queueManager.addJob(
+        QUEUE_NAMES.geminiAnalysis,
+        'analyze',
+        {
+          type: 'analyze',
+          videoPath: filePath,
+          videoId: video.id,
+        }
+      );
+
+      console.log(`✅ Gemini 分析任务已加入队列: Video ID ${video.id}`);
+
+    } catch (queueError) {
+      // 如果任务队列添加失败，记录错误但不影响上传
+      console.error('❌ 添加任务到队列失败:', queueError);
+
+      // 更新视频状态为错误
+      await queries.video.updateStatus(video.id!, 'error');
+    }
+
     return NextResponse.json({
       success: true,
       data: video,
+      message: '视频上传成功，正在后台处理...',
     }, { status: 201 });
   } catch (error) {
     return NextResponse.json(

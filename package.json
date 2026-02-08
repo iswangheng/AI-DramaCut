@@ -8,6 +8,8 @@
     "build": "next build",
     "start": "NODE_ENV=production tsx lib/server.ts",
     "start:next": "next start",
+    "workers": "tsx scripts/workers.ts",
+    "workers:dev": "tsx watch scripts/workers.ts",
     "lint": "next lint",
     "remotion:preview": "remotion studio",
     "remotion:render": "remotion render RemotionRoot",

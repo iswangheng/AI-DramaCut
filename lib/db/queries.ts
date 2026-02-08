@@ -172,6 +172,13 @@ export const videoQueries = {
   },
 
   /**
+   * 标记视频错误状态
+   */
+  async updateError(id: number, errorMessage: string) {
+    return this.updateStatus(id, 'error', errorMessage);
+  },
+
+  /**
    * 更新视频 AI 分析结果
    */
   async updateAnalysis(id: number, data: { summary?: string; viralScore?: number }) {

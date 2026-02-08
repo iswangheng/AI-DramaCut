@@ -849,3 +849,5 @@ ${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)}] ${s.d
 // ============================================
 // 导出单例实例
 // ============================================
+
+export const geminiClient = new GeminiClient();
