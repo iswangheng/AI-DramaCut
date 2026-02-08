@@ -395,3 +395,104 @@ export async function batchRenderRemotionVideos(
 
   return results;
 }
+
+/**
+ * 渲染多片段组合视频（快捷方法）
+ *
+ * @param options 渲染选项
+ * @returns 渲染结果
+ *
+ * @example
+ * ```typescript
+ * const result = await renderMultiClipComposition({
+ *   clips: [
+ *     {
+ *       src: './intro.mp4',
+ *       subtitles: introSubtitles
+ *     },
+ *     {
+ *       src: './scene1.mp4',
+ *       subtitles: scene1Subtitles
+ *     },
+ *     {
+ *       src: './outro.mp4',
+ *       subtitles: outroSubtitles
+ *     }
+ *   ],
+ *   outputPath: './output.mp4',
+ *   transition: 'fade',
+ *   transitionDurationMs: 1000,
+ *   onProgress: (progress) => console.log(`${progress.toFixed(1)}%`)
+ * });
+ * ```
+ */
+export async function renderMultiClipComposition(options: {
+  clips: Array<{
+    src: string;
+    startMs?: number;
+    durationMs?: number;
+    subtitles?: Array<{
+      startMs: number;
+      endMs: number;
+      text: string;
+      words?: Array<{
+        text: string;
+        startMs: number;
+        endMs: number;
+      }>;
+    }>;
+  }>;
+  outputPath: string;
+  transition?: 'none' | 'fade' | 'slide' | 'zoom';
+  transitionDurationMs?: number;
+  width?: number;
+  height?: number;
+  fps?: number;
+  fontSize?: number;
+  fontColor?: string;
+  highlightColor?: string;
+  outlineColor?: string;
+  outlineSize?: number;
+  subtitleY?: number;
+  watermarkUrl?: string | null;
+  onProgress?: RenderProgressCallback;
+}): Promise<RenderResult> {
+  const {
+    clips,
+    outputPath,
+    transition = 'none',
+    transitionDurationMs = 500,
+    width = 1080,
+    height = 1920,
+    fps = 30,
+    fontSize = 60,
+    fontColor = 'white',
+    highlightColor = '#FFE600',
+    outlineColor = 'black',
+    outlineSize = 5,
+    subtitleY = 80,
+    watermarkUrl = null,
+    onProgress,
+  } = options;
+
+  return renderRemotionVideo({
+    compositionId: 'MultiClipComposition',
+    inputProps: {
+      clips,
+      transition,
+      transitionDurationMs,
+      fontSize,
+      fontColor,
+      highlightColor,
+      outlineColor,
+      outlineSize,
+      subtitleY,
+      watermarkUrl,
+    },
+    outputPath,
+    width,
+    height,
+    fps,
+    onProgress,
+  });
+}

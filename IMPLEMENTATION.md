@@ -639,6 +639,187 @@ npx tsx scripts/test-remotion-renderer.ts ./video.mp4 ./subtitles.json \
 
 ---
 
+### 11. 多片段 Remotion 组合功能（2025-02-08）
+Agent 3 - 视频处理核心开发
+
+#### 核心功能
+- ✅ **多片段组合** - 支持无限制的视频片段顺序组合
+- ✅ **转场效果** - 淡入淡出、滑动、缩放切换
+- ✅ **独立字幕** - 每个片段拥有独立的字幕列表
+- ✅ **渲染集成** - 完整集成 Remotion 渲染客户端
+
+#### 文件结构
+```
+components/remotion/
+├── MultiClipComposition.tsx  # 多片段组合组件
+└── subtitles/                 # 字幕组件
+
+remotion/
+└── root.tsx                   # 添加 MultiClipComposition
+
+lib/remotion/
+└── renderer.ts                # 添加 renderMultiClipComposition 快捷方法
+
+scripts/
+└── test-multiclip.ts          # 测试脚本
+
+docs/
+└── MULTICLIP-COMPOSITION.md   # 功能文档
+```
+
+#### 使用示例
+```typescript
+// 渲染多片段组合视频
+const result = await renderMultiClipComposition({
+  clips: [
+    {
+      src: './intro.mp4',
+      subtitles: introSubtitles
+    },
+    {
+      src: './scene1.mp4',
+      startMs: 5000,
+      durationMs: 15000,
+      subtitles: scene1Subtitles
+    },
+    {
+      src: './outro.mp4',
+      subtitles: outroSubtitles
+    }
+  ],
+  outputPath: './output.mp4',
+  transition: 'fade',
+  transitionDurationMs: 1000,
+  onProgress: (progress) => console.log(`${progress.toFixed(1)}%`)
+});
+```
+
+#### 转场效果
+| 类型 | 说明 | 适用场景 |
+|------|------|---------|
+| none | 无转场 | 快速剪辑 |
+| fade | 淡入淡出 | 情绪渲染 |
+| slide | 滑动切换 | 现代/科技感 |
+| zoom | 缩放切换 | 戏剧性时刻 |
+
+#### 测试命令
+```bash
+# 组合两个视频片段
+npx tsx scripts/test-multiclip.ts ./clip1.mp4 ./clip2.mp4
+
+# 使用淡入淡出转场
+npx tsx scripts/test-multiclip.ts ./clip1.mp4 ./clip2.mp4 --transition fade
+
+# 指定转场持续时间
+npx tsx scripts/test-multiclip.ts ./clip1.mp4 ./clip2.mp4 \
+  --transition fade --transition-duration 1000
+```
+
+#### 应用场景
+- 模式 B：深度解说视频（开场 → 反转 → 解说 → 总结）
+- 多集短剧合并
+- 带转场效果的视频集锦
+
+#### 技术亮点
+- **无限制片段**: 支持任意数量的视频片段组合
+- **独立字幕**: 每个片段可拥有独立的字幕和时间轴
+- **灵活转场**: 4 种转场效果，可自定义持续时间
+- **片段裁剪**: 支持指定开始时间和持续时间
+- **自动时长计算**: 自动计算所有片段的总时长
+
+---
+
+### 12. 项目管理数据库层（2025-02-08）
+Agent 4 - 数据层与任务队列开发
+
+#### 核心功能
+- ✅ **projects 表** - 支持项目级别的素材管理
+- ✅ **一对多关系** - project → videos（级联删除）
+- ✅ **完整查询 API** - 增删改查、搜索、统计
+- ✅ **进度跟踪** - 项目处理进度和当前步骤
+
+#### 数据库结构
+```
+projects (项目)
+    ├── id, name, description
+    ├── status (ready/processing/error)
+    ├── progress (0-100)
+    ├── currentStep (当前步骤描述)
+    └── timestamps
+
+    ↓ 1:N (外键: project_id)
+videos (视频)
+    ├── projectId (外键)
+    └── ... (其他字段)
+```
+
+#### 文件结构
+```
+lib/db/
+├── schema.ts              # 新增 projects 表定义
+├── client.ts              # 新增 projects 表 SQL
+└── queries.ts             # 新增 projectQueries
+
+docs/
+└── AGENT-4-PROJECTS-FIELD-UPDATE.md  # 功能文档
+```
+
+#### 查询 API
+```typescript
+import { projectQueries } from '@/lib/db/queries';
+
+// 创建项目
+const project = await projectQueries.create({
+  name: '霸道总裁爱上我',
+  description: '都市言情短剧，共12集',
+});
+
+// 获取项目列表
+const projects = await projectQueries.list(50, 0);
+
+// 搜索项目
+const results = await projectQueries.search('霸道');
+
+// 获取项目及统计
+const projectWithStats = await projectQueries.getWithStats(project.id);
+console.log(projectWithStats.videoCount);      // 12
+console.log(projectWithStats.totalDuration);   // "2.5 小时"
+
+// 更新项目进度
+await projectQueries.updateProgress(project.id, 65, 'Gemini 分析中... 65%');
+
+// 删除项目（级联删除所有视频）
+await projectQueries.delete(project.id);
+```
+
+#### 视频查询 API
+```typescript
+import { videoQueries } from '@/lib/db/queries';
+
+// 获取项目的所有视频
+const videos = await videoQueries.getByProjectId(projectId);
+```
+
+#### 数据库迁移
+```bash
+# 开发环境：删除重建
+POST /api/db/init { "reset": true }
+
+# 手动迁移（见文档）
+# 1. 创建 projects 表
+# 2. 添加 project_id 外键
+# 3. 创建默认项目
+# 4. 迁移现有数据
+```
+
+#### 技术亮点
+- **级联删除**: 删除项目自动删除所有关联数据
+- **进度跟踪**: 实时更新项目处理进度
+- **搜索支持**: 按项目名称模糊搜索
+- **统计优化**: 一次查询获取项目及视频统计
+
+---
+
 ## 📚 参考资源
 
 - **Remotion 官方文档**: https://www.remotion.dev/
