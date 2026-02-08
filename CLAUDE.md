@@ -12,7 +12,9 @@
 
 DramaGen AI 是一款面向短剧/漫剧剪辑师、投放运营及自媒体博主的智能化视频生产工具。系统深度集成 Gemini 3 的多模态理解能力，实现从原始长视频到高点击短视频的自动化/半自动化产出。
 
-**当前状态**: 项目处于**规划/文档阶段**，尚未编写任何源代码。
+**当前状态**: 项目已完成**基础架构搭建**（2025-02-08），核心字幕渲染系统和 FFmpeg 工具库已就绪。
+
+**GitHub 仓库**: https://github.com/iswangheng/AI-DramaCut.git
 
 ---
 
@@ -114,20 +116,30 @@ DramaGen AI 是一款面向短剧/漫剧剪辑师、投放运营及自媒体博�
 
 ## 开发命令
 
-*注意：目前尚未存在 package.json。实现开始后：*
-
 ```bash
-# 预期开发命令（待实现）
-npm run dev          # 启动 Next.js 开发服务器
-npm run build        # 构建生产版本
-npm run lint         # 运行 ESLint
-npm run test         # 运行测试（添加测试套件后）
+# Next.js 开发
+npm run dev              # 启动 Next.js 开发服务器 (http://localhost:3000)
+npm run build            # 构建生产版本
+npm run start            # 启动生产服务器
+npm run lint             # 运行 ESLint
+
+# Remotion 视频渲染
+npm run remotion:preview     # 启动 Remotion Studio 预览
+npm run remotion:render      # 渲染视频
+npm run remotion:render:subtitle  # 使用 props 文件渲染字幕视频
+
+# Git 操作
+git status              # 查看状态
+git add .               # 添加修改
+git commit -m "描述"     # 提交修改
+git push                # 推送到 GitHub
 ```
 
 ---
 
 ## 关键文档文件
 
+### 产品与技术文档
 - `config.md` - 核心配置和功能需求
 - `DramaGen AI 产品需求文档 (PRD).md` - 完整产品需求和验收标准
 - `DramaGen AI 技术架构方案.md` - 详细技术架构
@@ -135,13 +147,215 @@ npm run test         # 运行测试（添加测试套件后）
 - `技术方案：毫秒级精度与并发处理.md` - 毫秒级精度和并发处理实现细节
 - `prompts.md` - Gemini 3 视频 AI 提示词
 
+### 开发文档
+- `CLAUDE.md` - 本文件，项目开发指导文档
+- `IMPLEMENTATION.md` - 开发进度和实现记录
+- `DEPLOYMENT.md` - 部署文档（云服务器部署流程）
+
 ---
 
 ## 实现优先级
 
-1. **基础搭建**: Next.js 15、SQLite schema、FFmpeg 封装工具
+1. **基础搭建**: Next.js 15、SQLite schema、FFmpeg 封装工具 ✅ (已完成)
 2. **模式 A**: 实现高光检测和毫秒级调整 UI
 3. **处理管线**: 构建镜头检测和语义标签系统
 4. **模式 B**: 开发解说生成和语义匹配
-5. **渲染**: 实现 Remotion 组件和病毒式字幕动画
+5. **渲染**: 实现 Remotion 组件和病毒式字幕动画 ✅ (已完成)
 6. **性能优化**: 集成 BullMQ 任务队列管理
+
+---
+
+## 已完成的工作 (2025-02-08)
+
+### ✅ 第一阶段：基础架构搭建
+- [x] Next.js 15 项目初始化（TypeScript + Tailwind + App Router）
+- [x] 项目目录结构创建
+- [x] 核心依赖安装（Remotion 4.0、Framer Motion、Zod）
+- [x] GitHub 仓库初始化和首次推送
+
+### ✅ 第二阶段：Remotion 字幕渲染系统
+从 `remotion-ai-subtitle-generation` 项目适配并集成：
+
+**字幕组件** (`components/remotion/subtitles/`):
+- `CaptionedVideo.tsx` - 主视频组件，集成视频+字幕+水印
+- `KaraokeSentence.tsx` - 卡拉OK风格字幕，支持单词级高亮
+- `Word.tsx` - 单词级字幕组件，支持弹跳动画
+- `types.ts` - 完整的 TypeScript 类型定义
+- `index.ts` - 组件导出入口
+
+**核心特性**:
+- ✅ 抖音爆款风格字幕（亮黄色 #FFE600 + 黑边）
+- ✅ 单词级时间戳支持（用于卡拉OK效果）
+- ✅ Spring 弹性动画系统
+- ✅ 自动加载 .json 字幕文件
+- ✅ 音量控制支持
+- ✅ 水印叠加支持
+- ✅ 完整的自定义样式系统
+
+### ✅ 第三阶段：FFmpeg 工具库
+**视频处理工具** (`lib/ffmpeg/`):
+- `trimVideo()` - 毫秒级精度视频裁剪
+  - 使用重编码（非 copy 模式）实现帧级精确切割
+  - 支持 CRF 质量控制和编码预设
+- `extractAudio()` - 音频提取（16kHz WAV 格式）
+- `mixAudio()` - 多轨道音频混合（原音+解说）
+- `adjustVolume()` - 精确音量调整
+- `normalizeFrameRate()` - 帧率对齐（统一 30fps）
+
+**类型定义**:
+- `TrimOptions` - 裁剪选项
+- `AudioExtractOptions` - 音频提取选项
+- `AudioMixOptions` - 音频混合选项
+- `VolumeAdjustOptions` - 音量调整选项
+
+### ✅ 第四阶段：Remotion 配置系统
+- `remotion/config.ts` - Remotion 全局配置
+- `remotion/root.tsx` - Root 组件和 Composition 定义
+- `remotion/index.ts` - Remotion 入口文件
+- 示例字幕数据和 props 文件
+
+---
+
+## 项目结构
+
+```
+001-AI-DramaCut/
+├── app/                          # Next.js App Router
+│   ├── layout.tsx               # 根布局
+│   ├── page.tsx                 # 首页
+│   └── globals.css              # 全局样式
+│
+├── components/                   # React 组件
+│   └── remotion/                # Remotion 相关组件
+│       ├── subtitles/           # 字幕组件
+│       │   ├── CaptionedVideo.tsx      # 主视频组件
+│       │   ├── KaraokeSentence.tsx     # 卡拉OK字幕
+│       │   ├── Word.tsx                # 单词字幕
+│       │   ├── types.ts                # 类型定义
+│       │   └── index.ts               # 导出入口
+│       └── utils/
+│           └── load-font.ts     # 字体加载工具
+│
+├── lib/                          # 工具库
+│   └── ffmpeg/                  # FFmpeg 工具
+│       ├── index.ts             # 工具入口
+│       ├── utils.ts             # 核心函数
+│       └── types.ts             # 类型定义
+│
+├── remotion/                     # Remotion 配置
+│   ├── config.ts                # Remotion 配置
+│   ├── root.tsx                 # Root 组件
+│   └── index.ts                 # 入口文件
+│
+├── public/                       # 静态资源
+│   ├── example-subtitle.json    # 示例字幕数据
+│   └── subtitle-props.json      # 示例 props
+│
+├── .gitignore                   # Git 忽略配置
+├── CLAUDE.md                    # 本文件
+├── IMPLEMENTATION.md            # 开发进度文档
+├── DEPLOYMENT.md                # 部署文档
+├── package.json                 # 项目配置
+├── tsconfig.json                # TypeScript 配置
+├── tailwind.config.ts           # Tailwind 配置
+├── next.config.mjs              # Next.js 配置
+└── postcss.config.mjs           # PostCSS 配置
+```
+
+---
+
+## 组件使用示例
+
+### Remotion 字幕组件
+```tsx
+import { CaptionedVideo } from "@/components/remotion/subtitles";
+
+<CaptionedVideo
+  src="/path/to/video.mp4"
+  subtitles={subtitleData}
+  fontSize={60}
+  fontColor="white"
+  highlightColor="#FFE600"  // 抖音爆款黄色
+  outlineColor="black"
+  outlineSize={5}
+  subtitleY={80}
+  originalVolume={1}
+/>
+```
+
+### FFmpeg 工具使用
+```typescript
+import { trimVideo, mixAudio } from "@/lib/ffmpeg";
+
+// 毫秒级视频裁剪
+trimVideo({
+  inputPath: "input.mp4",
+  outputPath: "output.mp4",
+  startTimeMs: 5000,  // 从第 5 秒开始
+  durationMs: 30000,  // 持续 30 秒
+});
+
+// 音频混合（原音15% + 解说100%）
+mixAudio({
+  videoPath: "video.mp4",
+  audioPath: "voiceover.mp3",
+  outputPath: "final.mp4",
+  videoVolume: 0.15,
+  audioVolume: 1.0
+});
+```
+
+---
+
+## 技术要点提醒
+
+### FFmpeg 毫秒级裁剪（核心）
+⚠️ **禁止使用 `-vcodec copy`**，因为它只能跳转到 I 帧，无法实现毫秒级精度。
+
+**正确做法**：
+```bash
+ffmpeg -ss [HH:MM:SS.ms] -i input.mp4 -t [duration] -c:v libx264 -preset fast -crf 18 output.mp4
+```
+
+### 字幕数据格式
+```json
+[
+  {
+    "startMs": 1000,
+    "endMs": 3000,
+    "text": "字幕内容",
+    "words": [
+      { "text": "字幕", "startMs": 1000, "endMs": 2000 },
+      { "text": "内容", "startMs": 2000, "endMs": 3000 }
+    ]
+  }
+]
+```
+
+### 帧率对齐
+所有视频必须预处理为 30fps，确保毫秒计算与帧号匹配：
+```typescript
+normalizeFrameRate(inputPath, outputPath, 30);
+```
+
+---
+
+## 下一步开发计划
+
+### 阶段 2：模式 A - 高光智能切片
+- [ ] 集成 Gemini 3 视频分析 API
+- [ ] 实现病毒式桥段自动检测
+- [ ] 构建毫秒级微调 UI（±100ms, ±500ms, ±1000ms）
+- [ ] 实现实时预览功能
+
+### 阶段 3：模式 B - 深度解说矩阵
+- [ ] 集成 ElevenLabs TTS API
+- [ ] 实现故事线自动提取
+- [ ] 构建语义搜索系统（向量检索）
+- [ ] 实现自动音画匹配
+
+### 阶段 4：任务队列与性能
+- [ ] 集成 BullMQ 任务队列
+- [ ] 实现 WebSocket 实时进度更新
+- [ ] 优化视频渲染性能
+- [ ] 实现并发处理机制

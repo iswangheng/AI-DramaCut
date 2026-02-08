@@ -35,3 +35,22 @@ next-env.d.ts
 
 # remotion
 .remotion
+
+# data and uploads
+/data/
+/uploads/
+/outputs/
+/videos/
+/temp/
+
+# logs
+/logs/
+*.log
+pm2-*.log
+
+# backups
+/backups/
+
+# database
+*.sqlite
+*.db
