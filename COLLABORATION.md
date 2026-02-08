@@ -62,8 +62,8 @@ lib/api/
   - /api/elevenlabs/generate-narration
 
 **当前任务**:
+- ✅ 错误重试机制（已完成）
 - 📋 待办：流式响应处理
-- 📋 待办：错误重试机制
 - 📋 待办：完善 wordTimings 提取（当前是临时方案）
 - 📋 待办：API 性能优化（缓存、批量处理）
 
@@ -442,6 +442,19 @@ git commit -m "chore: 解决 <Agent A> 和 <Agent B> 的冲突"
   - POST /api/gemini/generate-narration
 - ✅ IGeminiAPI 和 IElevenLabsAPI 接口契约 100% 符合
 - 提交: a7827bf
+
+**21:00** - Agent 2 完成错误重试机制
+- ✅ 创建通用重试工具 (lib/api/utils/retry.ts)
+  - withRetry() - 带重试的异步函数执行器
+  - 支持指数退避策略（默认 1s → 2s → 4s → ...）
+  - 支持最大重试次数限制（默认 3 次）
+  - 智能错误识别（自动过滤不可重试的错误）
+- ✅ Gemini 客户端集成重试机制
+  - callApi() 方法应用 withRetry
+- ✅ ElevenLabs 客户端集成重试机制
+  - request() 和 textToSpeech() 方法应用 withRetry
+- ✅ 创建测试脚本 (scripts/test-retry.ts)
+- 提交: e863663
 
 ---
 
