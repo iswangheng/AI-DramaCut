@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { MainLayout } from "@/components/main-layout";
 import { Button } from "@/components/ui/button";
@@ -231,10 +231,11 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
   );
 }
 
-export default function ProjectDetailPage({ params }: { params: { id: string } }) {
+export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   return (
     <MainLayout>
-      <ProjectDetailContent projectId={params.id} />
+      <ProjectDetailContent projectId={id} />
     </MainLayout>
   );
 }
