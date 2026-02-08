@@ -638,7 +638,7 @@ ${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)} - ${th
   async generateNarrationStream(
     storyline: Storyline,
     style: "hook" | "suspense" | "emotional" | "roast",
-    onChunk: StreamCallback
+    onChunk: (chunk: import('./utils/streaming').StreamChunk) => void | Promise<void>
   ): Promise<GeminiResponse<string>> {
     // 1. 先生成完整文本（使用非流式 API）
     const response = await this.generateNarration(storyline, style);
@@ -682,7 +682,7 @@ ${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)} - ${th
   async callApiStream(
     prompt: string,
     systemInstruction: string | undefined,
-    onChunk: StreamCallback
+    onChunk: (chunk: import('./utils/streaming').StreamChunk) => void | Promise<void>
   ): Promise<GeminiResponse<string>> {
     // 注意：当前 Gemini API 可能不支持原生流式
     // 这里使用模拟流式（完整生成后分块推送）

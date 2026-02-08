@@ -11,7 +11,7 @@ export interface StreamChunk {
   error?: string;
 }
 
-export type StreamCallback = (chunk: StreamChunk) => void;
+export type StreamCallback = (chunk: StreamChunk) => void | Promise<void>;
 
 /**
  * Server-Sent Events (SSE) 响应格式

@@ -110,22 +110,40 @@ function formatMsToTime(ms: number): string {
   const seconds = totalSeconds % 60;
   const milliseconds = ms % 1000;
 
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(milliseconds).padStart(3, "0")}`;
-  }
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(milliseconds).padStart(3, "0")}`;
+  // 始终输出完整的 HH:MM:SS.mmm 格式，确保解析一致性
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(milliseconds).padStart(3, "0")}`;
 }
 
 function parseTimeToMs(timeStr: string): number {
   const parts = timeStr.split(":");
   if (parts.length === 3) {
-    const [min, sec, ms] = parts;
-    return (
-      parseInt(min) * 60 * 1000 +
-      parseInt(sec) * 1000 +
-      parseInt(ms)
-    );
+    // 格式: "MM:SS.mmm" 或 "HH:MM:SS.mmm"
+    const [first, second, third] = parts;
+
+    // 检查第三个部分是否包含小数点（秒.毫秒）
+    if (third.includes(".")) {
+      const [sec, ms] = third.split(".");
+      // first 是分钟，second 是秒，third 是秒.毫秒（需要处理）
+      // 但这种格式不太常见，先按 HH:MM:SS.mmm 处理
+      const hr = parseInt(first);
+      const min = parseInt(second);
+      return (
+        hr * 3600 * 1000 +
+        min * 60 * 1000 +
+        parseInt(sec) * 1000 +
+        parseInt(ms.padEnd(3, '0'))
+      );
+    } else {
+      // 格式: "MM:SS:mmm"（毫秒用冒号分隔）
+      const [min, sec, ms] = parts;
+      return (
+        parseInt(min) * 60 * 1000 +
+        parseInt(sec) * 1000 +
+        parseInt(ms)
+      );
+    }
   } else if (parts.length === 4) {
+    // 格式: "HH:MM:SS:mmm"
     const [hr, min, sec, ms] = parts;
     return (
       parseInt(hr) * 3600 * 1000 +
@@ -207,8 +225,6 @@ function HighlightContent() {
     adjustment: number,
     event?: React.MouseEvent
   ) => {
-    console.log('adjustTime called:', { type, adjustment, currentTime: Date.now() });
-
     // 阻止事件冒泡，避免触发父容器的点击事件
     if (event) {
       event.stopPropagation();
@@ -219,12 +235,20 @@ function HighlightContent() {
     const newMs = Math.max(0, currentMs + adjustment);
     const newTimeStr = formatMsToTime(newMs);
 
-    console.log('Time adjustment:', { currentTimeStr, currentMs, newMs, newTimeStr });
-
     if (type === "start") {
       setStartTime(newTimeStr);
     } else {
       setEndTime(newTimeStr);
+    }
+
+    // 同时跳转播放器（仅当播放器已加载时）
+    if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
+      try {
+        playerRef.current.seekTo(newMs / 1000);
+      } catch (error) {
+        // 忽略播放器错误，因为现在播放器可能还未集成
+        console.debug('Player seekTo skipped:', error);
+      }
     }
   };
 
