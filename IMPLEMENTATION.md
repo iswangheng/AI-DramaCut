@@ -820,6 +820,99 @@ POST /api/db/init { "reset": true }
 
 ---
 
+### 13. 项目管理 API 和前后端对接（2025-02-08）
+Agent 4 - 数据层与任务队列开发
+
+#### 核心功能
+- ✅ **RESTful API** - 完整的项目管理接口
+- ✅ **前端客户端** - 封装 API 调用的 TypeScript 客户端
+- ✅ **UI 对接** - 项目列表和详情页面集成
+- ✅ **错误处理** - 统一的错误处理和加载状态
+
+#### API 端点
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/projects` | 获取项目列表 |
+| POST | `/api/projects` | 创建新项目 |
+| GET | `/api/projects/:id` | 获取项目详情 |
+| PUT | `/api/projects/:id` | 更新项目信息 |
+| DELETE | `/api/projects/:id` | 删除项目 |
+| GET | `/api/projects/search` | 搜索项目 |
+| GET | `/api/projects/:id/videos` | 获取项目视频列表 |
+| POST | `/api/projects/:id/videos` | 上传视频到项目 |
+| DELETE | `/api/videos/:id` | 删除视频 |
+
+#### 文件结构
+```
+app/api/
+├── projects/
+│   ├── route.ts              # 项目列表 + 创建
+│   ├── [id]/route.ts         # 项目详情 + 更新 + 删除
+│   ├── search/route.ts       # 搜索项目
+│   └── [id]/videos/route.ts  # 项目视频管理
+└── videos/
+    └── [id]/route.ts         # 删除视频
+
+lib/api/
+└── projects.ts               # 前端 API 客户端
+
+scripts/
+└── test-api-routes.ts        # API 测试脚本
+```
+
+#### 前端使用
+```typescript
+import { projectsApi } from '@/lib/api';
+
+// 获取项目列表
+const { success, data } = await projectsApi.list(50, 0);
+
+// 创建项目
+const result = await projectsApi.create({
+  name: '霸道总裁爱上我',
+  description: '都市言情短剧'
+});
+
+// 更新项目进度
+await projectsApi.updateProgress(projectId, 75, '镜头检测中...');
+
+// 删除项目
+await projectsApi.delete(projectId);
+```
+
+#### UI 集成
+```tsx
+// app/projects/page.tsx
+const loadProjects = async () => {
+  const response = await projectsApi.list();
+  if (response.success) {
+    setProjects(response.data);
+  }
+};
+
+useEffect(() => {
+  loadProjects();
+}, []);
+```
+
+#### API 测试
+```bash
+# 启动开发服务器
+npm run dev
+
+# 在另一个终端运行测试
+npx tsx scripts/test-api-routes.ts
+```
+
+#### 技术亮点
+- **统一响应格式**: success + data + message
+- **完整错误处理**: 400/404/500 状态码
+- **类型安全**: 完整的 TypeScript 类型定义
+- **加载状态**: UI 支持加载和错误状态
+- **实时刷新**: 支持手动刷新数据
+
+---
+
 ## 📚 参考资源
 
 - **Remotion 官方文档**: https://www.remotion.dev/
