@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { MainLayout } from "@/components/main-layout";
 import { Button } from "@/components/ui/button";
@@ -8,62 +8,68 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { CreateProjectDialog } from "@/components/create-project-dialog";
-
-interface Project {
-  id: string;
-  name: string;
-  description?: string;
-  videoCount: number;
-  totalDuration: string;
-  status: "ready" | "processing";
-  progress: number;
-  currentStep?: string;
-  createdAt: Date;
-}
-
-// 示例数据
-const initialProjects: Project[] = [
-  {
-    id: "1",
-    name: "霸道总裁爱上我",
-    videoCount: 12,
-    totalDuration: "2.5 小时",
-    status: "ready",
-    progress: 100,
-    createdAt: new Date("2025-02-01"),
-  },
-  {
-    id: "2",
-    name: "重生之豪门千金",
-    videoCount: 8,
-    totalDuration: "1.8 小时",
-    status: "processing",
-    progress: 65,
-    currentStep: "Gemini 分析中... 65%",
-    createdAt: new Date("2025-02-05"),
-  },
-];
+import { projectsApi, type ProjectWithStats } from "@/lib/api";
 
 function ProjectsContent() {
   const router = useRouter();
-  const [projects, setProjects] = useState<Project[]>(initialProjects);
+  const [projects, setProjects] = useState<ProjectWithStats[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleCreateProject = (name: string, description?: string) => {
-    const newProject: Project = {
-      id: Date.now().toString(),
-      name,
-      description,
-      videoCount: 0,
-      totalDuration: "0 分钟",
-      status: "ready",
-      progress: 0,
-      createdAt: new Date(),
-    };
+  // 加载项目列表
+  const loadProjects = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await projectsApi.list();
 
-    setProjects([newProject, ...projects]);
+      if (response.success && response.data) {
+        // 为每个项目获取统计信息
+        const projectsWithStats = await Promise.all(
+          response.data.map(async (project) => {
+            const detailResponse = await projectsApi.getById(project.id!);
+            if (detailResponse.success && detailResponse.data) {
+              return detailResponse.data;
+            }
+            return {
+              ...project,
+              videoCount: 0,
+              totalDuration: "0 分钟",
+            };
+          })
+        );
+        setProjects(projectsWithStats);
+      } else {
+        setError(response.message || "加载项目列表失败");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "加载项目列表失败");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleProjectClick = (projectId: string) => {
+  // 页面加载时获取项目列表
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  const handleCreateProject = async (name: string, description?: string) => {
+    try {
+      const response = await projectsApi.create({ name, description });
+
+      if (response.success) {
+        // 重新加载项目列表
+        await loadProjects();
+      } else {
+        alert(response.message || "创建项目失败");
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "创建项目失败");
+    }
+  };
+
+  const handleProjectClick = (projectId: number) => {
     router.push(`/projects/${projectId}`);
   };
 
@@ -71,9 +77,23 @@ function ProjectsContent() {
     <div className="p-10 animate-fade-in">
       {/* 页面标题 */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground mb-2">素材管理</h1>
-        <p className="text-base text-muted-foreground">管理你的短剧项目素材，查看预处理进度</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground mb-2">素材管理</h1>
+            <p className="text-base text-muted-foreground">管理你的短剧项目素材，查看预处理进度</p>
+          </div>
+          <Button variant="outline" onClick={loadProjects} disabled={loading}>
+            {loading ? "加载中..." : "刷新"}
+          </Button>
+        </div>
       </div>
+
+      {/* 错误提示 */}
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-red-600">{error}</p>
+        </div>
+      )}
 
       {/* 操作按钮 */}
       <div className="mb-6">
@@ -87,7 +107,7 @@ function ProjectsContent() {
           <Card
             key={project.id}
             className="hover:shadow-md transition-base cursor-pointer"
-            onClick={() => handleProjectClick(project.id)}
+            onClick={() => handleProjectClick(project.id!)}
           >
             <CardContent className="p-6">
               <div className="flex items-start justify-between mb-4">
@@ -109,6 +129,11 @@ function ProjectsContent() {
                 {project.status === "processing" && (
                   <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">
                     处理中
+                  </Badge>
+                )}
+                {project.status === "error" && (
+                  <Badge className="bg-red-100 text-red-700 hover:bg-red-100">
+                    错误
                   </Badge>
                 )}
               </div>
@@ -139,10 +164,16 @@ function ProjectsContent() {
         </Card> */}
       </div>
 
-      {projects.length === 0 && (
+      {!loading && projects.length === 0 && (
         <div className="text-center py-16">
           <p className="text-muted-foreground text-lg mb-4">还没有项目</p>
           <CreateProjectDialog onCreateProject={handleCreateProject} />
+        </div>
+      )}
+
+      {loading && (
+        <div className="text-center py-16">
+          <p className="text-muted-foreground text-lg">加载中...</p>
         </div>
       )}
     </div>

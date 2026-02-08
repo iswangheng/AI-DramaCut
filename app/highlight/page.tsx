@@ -204,22 +204,27 @@ function HighlightContent() {
   // 微调时间
   const adjustTime = (
     type: "start" | "end",
-    adjustment: number
+    adjustment: number,
+    event?: React.MouseEvent
   ) => {
+    console.log('adjustTime called:', { type, adjustment, currentTime: Date.now() });
+
+    // 阻止事件冒泡，避免触发父容器的点击事件
+    if (event) {
+      event.stopPropagation();
+    }
+
     const currentTimeStr = type === "start" ? startTime : endTime;
     const currentMs = parseTimeToMs(currentTimeStr);
     const newMs = Math.max(0, currentMs + adjustment);
     const newTimeStr = formatMsToTime(newMs);
 
+    console.log('Time adjustment:', { currentTimeStr, currentMs, newMs, newTimeStr });
+
     if (type === "start") {
       setStartTime(newTimeStr);
     } else {
       setEndTime(newTimeStr);
-    }
-
-    // 同时跳转播放器
-    if (playerRef.current) {
-      playerRef.current.seekTo(newMs / 1000);
     }
   };
 
@@ -276,7 +281,10 @@ function HighlightContent() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setIsPlaying(!isPlaying)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsPlaying(!isPlaying);
+                  }}
                 >
                   {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                 </Button>
@@ -327,34 +335,38 @@ function HighlightContent() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => adjustTime("start", -1000)}
+                    onClick={(e) => adjustTime("start", -1000, e)}
                   >
                     -1s
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => adjustTime("start", -100)}
+                    onClick={(e) => adjustTime("start", -100, e)}
                   >
                     -100ms
                   </Button>
                   <Input
                     type="text"
                     value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setStartTime(e.target.value);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
                     className="font-mono text-center"
                   />
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => adjustTime("start", 100)}
+                    onClick={(e) => adjustTime("start", 100, e)}
                   >
                     +100ms
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => adjustTime("start", 1000)}
+                    onClick={(e) => adjustTime("start", 1000, e)}
                   >
                     +1s
                   </Button>
@@ -368,34 +380,38 @@ function HighlightContent() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => adjustTime("end", -1000)}
+                    onClick={(e) => adjustTime("end", -1000, e)}
                   >
                     -1s
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => adjustTime("end", -100)}
+                    onClick={(e) => adjustTime("end", -100, e)}
                   >
                     -100ms
                   </Button>
                   <Input
                     type="text"
                     value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setEndTime(e.target.value);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
                     className="font-mono text-center"
                   />
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => adjustTime("end", 100)}
+                    onClick={(e) => adjustTime("end", 100, e)}
                   >
                     +100ms
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => adjustTime("end", 1000)}
+                    onClick={(e) => adjustTime("end", 1000, e)}
                   >
                     +1s
                   </Button>
@@ -417,12 +433,22 @@ function HighlightContent() {
                       min={1}
                       max={50}
                       value={manualClipCount}
-                      onChange={(e) => setManualClipCount(parseInt(e.target.value) || 1)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        setManualClipCount(parseInt(e.target.value) || 1);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
                       className="w-20"
                     />
                     <span className="text-sm text-muted-foreground">个</span>
                   </div>
-                  <Button onClick={handleAddManualClip} className="gap-2">
+                  <Button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleAddManualClip();
+                    }}
+                    className="gap-2"
+                  >
                     <Plus className="w-4 h-4" />
                     手动新增切片
                   </Button>
@@ -439,7 +465,10 @@ function HighlightContent() {
             <CardContent className="p-4">
               <Button
                 className="w-full gap-2"
-                onClick={handleAIGenerate}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAIGenerate();
+                }}
               >
                 <Wand2 className="w-4 h-4" />
                 AI 一键生成高光切片
@@ -457,7 +486,11 @@ function HighlightContent() {
             </h3>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {selectedClip ? "已选择" : "筛选"} ▼
                 </Button>
               </DropdownMenuTrigger>
@@ -522,13 +555,18 @@ function HighlightContent() {
                     {/* 操作菜单 */}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           ...
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setStartTime(formatMsToTime(clip.startMs));
                             setEndTime(formatMsToTime(clip.endMs));
                             handleSeekTo(clip.startMs);
@@ -539,7 +577,10 @@ function HighlightContent() {
                         </DropdownMenuItem>
                         {clip.status === "pending" && (
                           <DropdownMenuItem
-                            onClick={() => handleAddToQueue(clip.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAddToQueue(clip.id);
+                            }}
                           >
                             <Check className="w-4 h-4 mr-2" />
                             加入渲染队列
@@ -547,7 +588,10 @@ function HighlightContent() {
                         )}
                         <DropdownMenuItem
                           className="text-red-600"
-                          onClick={() => handleDeleteClip(clip.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClip(clip.id);
+                          }}
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
                           删除

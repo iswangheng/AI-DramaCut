@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, use } from "react";
+import { useState, use, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { MainLayout } from "@/components/main-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { CreateProjectDialog } from "@/components/create-project-dialog";
 import { UploadVideoDialog } from "@/components/upload-video-dialog";
 import {
   DropdownMenu,
@@ -16,70 +15,80 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ArrowLeft, Upload, MoreVertical, Trash2, Eye } from "lucide-react";
-
-interface Video {
-  id: string;
-  filename: string;
-  duration: string;
-  fileSize: string;
-  status: "uploading" | "processing" | "analyzing" | "ready" | "error";
-  progress: number;
-  currentStep?: string;
-  thumbnail?: string;
-  createdAt: Date;
-}
+import { projectsApi, videosApi, type Video } from "@/lib/api";
 
 interface Project {
-  id: string;
+  id: number;
   name: string;
   description?: string;
+  videoCount: number;
+  totalDuration: string;
+  status: "ready" | "processing" | "error";
+  progress: number;
+  currentStep?: string;
   createdAt: Date;
 }
-
-// 模拟数据
-const mockProject: Project = {
-  id: "1",
-  name: "霸道总裁爱上我",
-  description: "都市言情短剧，共12集",
-  createdAt: new Date("2025-02-01"),
-};
-
-const mockVideos: Video[] = [
-  {
-    id: "1",
-    filename: "霸道总裁爱上我.ep1.mp4",
-    duration: "45:32",
-    fileSize: "1.2 GB",
-    status: "ready",
-    progress: 100,
-    createdAt: new Date("2025-02-01"),
-  },
-  {
-    id: "2",
-    filename: "霸道总裁爱上我.ep2.mp4",
-    duration: "44:18",
-    fileSize: "1.1 GB",
-    status: "analyzing",
-    progress: 75,
-    currentStep: "Gemini 完整理解中... 75%",
-    createdAt: new Date("2025-02-02"),
-  },
-  {
-    id: "3",
-    filename: "霸道总裁爱上我.ep3.mp4",
-    duration: "46:05",
-    fileSize: "1.3 GB",
-    status: "processing",
-    progress: 45,
-    currentStep: "镜头检测中... 检测到 82 个镜头",
-    createdAt: new Date("2025-02-03"),
-  },
-];
 
 function ProjectDetailContent({ projectId }: { projectId: string }) {
   const router = useRouter();
-  const [project] = useState<Project>(mockProject);
-  const [videos, setVideos] = useState<Video[]>(mockVideos);
+  const [project, setProject] = useState<Project | null>(null);
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // 加载项目详情和视频列表
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const id = parseInt(projectId);
+      if (isNaN(id)) {
+        throw new Error("无效的项目 ID");
+      }
+
+      // 并行加载项目详情和视频列表
+      const [projectResponse, videosResponse] = await Promise.all([
+        projectsApi.getById(id),
+        projectsApi.getVideos(id),
+      ]);
+
+      if (projectResponse.success && projectResponse.data) {
+        setProject(projectResponse.data);
+      } else {
+        setError(projectResponse.message || "加载项目详情失败");
+      }
+
+      if (videosResponse.success && videosResponse.data) {
+        setVideos(videosResponse.data);
+      } else {
+        setError(videosResponse.message || "加载视频列表失败");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "加载数据失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 页面加载时获取数据
+  useEffect(() => {
+    loadData();
+  }, [projectId]);
+
+  // 格式化时长
+  const formatDuration = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  };
+
+  // 格式化文件大小
+  const formatFileSize = (bytes: number) => {
+    const gb = bytes / 1024 / 1024 / 1024;
+    return `${gb.toFixed(2)} GB`;
+  };
 
   const getStatusBadge = (status: Video["status"]) => {
     switch (status) {
@@ -98,27 +107,82 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
     }
   };
 
-  const handleDeleteVideo = (videoId: string) => {
-    if (confirm("确定要删除这个视频吗？")) {
-      setVideos(videos.filter((v) => v.id !== videoId));
+  const handleDeleteVideo = async (videoId: number) => {
+    if (!confirm("确定要删除这个视频吗？")) {
+      return;
+    }
+
+    try {
+      const response = await videosApi.delete(videoId);
+
+      if (response.success) {
+        // 重新加载视频列表
+        await loadData();
+      } else {
+        alert(response.message || "删除视频失败");
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "删除视频失败");
     }
   };
 
-  const handleUploadVideos = (files: File[]) => {
-    // 模拟添加视频
-    const newVideos: Video[] = files.map((file) => ({
-      id: Date.now().toString() + Math.random(),
-      filename: file.name,
-      duration: "--:--",
-      fileSize: `${(file.size / 1024 / 1024 / 1024).toFixed(2)} GB`,
-      status: "processing" as const,
-      progress: 0,
-      currentStep: "上传完成，开始处理...",
-      createdAt: new Date(),
-    }));
+  const handleUploadVideos = async (files: File[]) => {
+    if (!project) return;
 
-    setVideos([...newVideos, ...videos]);
+    // 注意：这里只是演示，实际上传需要实现文件上传处理
+    // 实际项目中应该：
+    // 1. 上传文件到服务器或云存储
+    // 2. 获取文件路径
+    // 3. 提取视频元数据
+    // 4. 调用 API 创建视频记录
+
+    alert("文件上传功能需要配合后端文件上传接口实现");
+
+    // 示例代码（需要实际的文件上传处理）：
+    // for (const file of files) {
+    //   // 1. 上传文件
+    //   const uploadResult = await uploadFile(file);
+    //
+    //   // 2. 提取元数据
+    //   const metadata = await extractVideoMetadata(uploadResult.path);
+    //
+    //   // 3. 创建记录
+    //   await projectsApi.uploadVideo(project.id, {
+    //     filename: file.name,
+    //     filePath: uploadResult.path,
+    //     fileSize: file.size,
+    //     durationMs: metadata.durationMs,
+    //     width: metadata.width,
+    //     height: metadata.height,
+    //     fps: metadata.fps,
+    //   });
+    // }
+    //
+    // await loadData();
   };
+
+  if (loading) {
+    return (
+      <div className="p-10 animate-fade-in">
+        <div className="text-center py-16">
+          <p className="text-muted-foreground text-lg">加载中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !project) {
+    return (
+      <div className="p-10 animate-fade-in">
+        <div className="text-center py-16">
+          <p className="text-red-600 text-lg mb-4">{error || "项目不存在"}</p>
+          <Button variant="outline" onClick={() => router.back()}>
+            返回
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-10 animate-fade-in">
@@ -170,9 +234,9 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
                         {video.filename}
                       </h3>
                       <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                        <span>{video.duration}</span>
+                        <span>{formatDuration(video.durationMs)}</span>
                         <span>·</span>
-                        <span>{video.fileSize}</span>
+                        <span>{formatFileSize(video.fileSize)}</span>
                         <span>·</span>
                         <span>{getStatusBadge(video.status)}</span>
                       </div>
@@ -192,7 +256,7 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-red-600"
-                          onClick={() => handleDeleteVideo(video.id)}
+                          onClick={() => handleDeleteVideo(video.id!)}
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
                           删除
@@ -204,23 +268,21 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
                   {/* 进度条 */}
                   {video.status !== "ready" && video.status !== "error" && (
                     <div className="mb-2">
-                      <Progress value={video.progress} className="h-2" />
-                      {video.currentStep && (
-                        <p className="text-xs text-muted-foreground mt-2">
-                          {video.currentStep}
-                        </p>
-                      )}
+                      <Progress value={0} className="h-2" />
+                      <p className="text-xs text-muted-foreground mt-2">
+                        {video.status === "uploading" && "上传中..."}
+                        {video.status === "processing" && "处理中..."}
+                        {video.status === "analyzing" && "AI 理解中..."}
+                      </p>
                     </div>
                   )}
 
                   {/* 处理详情（已就绪的视频） */}
                   {video.status === "ready" && (
                     <div className="flex gap-4 text-xs text-muted-foreground">
-                      <span>🎬 128 个镜头片段</span>
+                      <span>🎬 视频处理完成</span>
                       <span>·</span>
-                      <span>🧠 Gemini 理解完成</span>
-                      <span>·</span>
-                      <span>📊 15 个高光候选</span>
+                      <span>🧠 可以开始 AI 分析</span>
                     </div>
                   )}
                 </div>
