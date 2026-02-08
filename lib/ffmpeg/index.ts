@@ -31,6 +31,11 @@ export {
   normalizeFrameRateWithProgress,
 } from "./progress";
 
+export {
+  concatVideos,
+  batchConcatVideos,
+} from "./concat";
+
 export type {
   VideoMetadata,
   TrimOptions,
@@ -44,3 +49,9 @@ export type {
   FFmpegProgressOptions,
   FFmpegProgress,
 } from "./progress";
+
+export type {
+  VideoSegment,
+  ConcatOptions,
+  ConcatResult,
+} from "./concat";

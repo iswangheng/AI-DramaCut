@@ -423,6 +423,74 @@ npx tsx scripts/test-ffmpeg-progress.ts ./test.mp4 normalize
 
 ---
 
+### 8. 视频拼接功能（2025-02-08）
+Agent 3 - 视频处理核心开发
+
+#### 核心功能
+- ✅ **两种拼接方法** - concat demuxer（快速）和 concat filter（高级）
+- ✅ **转场效果** - 支持淡入淡出、交叉淡入淡出
+- ✅ **进度监控** - 实时反馈拼接进度
+- ✅ **批量拼接** - 支持多批次并行处理
+
+#### 文件结构
+```
+lib/ffmpeg/
+├── concat.ts              # 视频拼接模块
+├── progress.ts            # 进度监控
+├── utils.ts               # 基础工具
+├── types.ts               # 类型定义
+└── index.ts               # 导出入口
+
+scripts/
+└── test-concat.ts          # 测试脚本
+
+docs/
+└── VIDEO-CONCAT.md         # 功能文档
+```
+
+#### 使用示例
+```typescript
+// 简单拼接（无转场）
+const result = await concatVideos({
+  segments: [
+    { path: './seg1.mp4' },
+    { path: './seg2.mp4' },
+    { path: './seg3.mp4' }
+  ],
+  outputPath: './output.mp4',
+  totalDuration: 180,
+  onProgress: (progress) => console.log(`${progress.toFixed(1)}%`)
+});
+
+// 带淡入淡出转场
+await concatVideos({
+  segments: [...],
+  outputPath: './output.mp4',
+  transition: 'fade',
+  transitionDurationMs: 1000
+});
+```
+
+#### 测试命令
+```bash
+# 简单拼接
+npx tsx scripts/test-concat.ts ./seg1.mp4 ./seg2.mp4
+
+# 带淡入淡出转场
+npx tsx scripts/test-concat.ts ./seg1.mp4 ./seg2.mp4 --transition fade
+
+# 指定输出分辨率
+npx tsx scripts/test-concat.ts ./seg1.mp4 ./seg2.mp4 --width 1280 --height 720
+```
+
+#### 技术亮点
+- **快速拼接**: concat demuxer 方法速度 ~5秒/5分钟视频
+- **高级拼接**: concat filter 支持转场、不同分辨率
+- **灵活配置**: 支持自定义分辨率、帧率、质量
+- **批量处理**: batchConcatVideos 支持多批次拼接
+
+---
+
 ## 📚 参考资源
 
 - **Remotion 官方文档**: https://www.remotion.dev/
