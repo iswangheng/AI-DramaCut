@@ -6,8 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { projectsApi } from "@/lib/api";
+// 延迟导入 API，避免在页面加载时初始化 Gemini 客户端
 
 // ============================================
 // 类型定义
@@ -113,15 +112,31 @@ function RecapContent() {
     loadProjects();
   }, []);
 
+  // 动态导入 API 客户端（避免初始化错误）
   const loadProjects = async () => {
     try {
       setLoading(true);
+
+      // 动态导入，只在需要时加载
+      const { projectsApi } = await import("@/lib/api/projects");
+
       const response = await projectsApi.list();
       if (response.success && response.data) {
         setProjects(response.data);
+      } else {
+        setError(response.message || "加载项目列表失败");
       }
     } catch (error) {
-      console.error("加载项目失败:", error);
+      const errorMsg = error instanceof Error ? error.message : "加载项目列表失败";
+
+      // 检查是否是 API key 未配置的错误
+      if (errorMsg.includes("API key") || errorMsg.includes("GEMINI_API_KEY")) {
+        setError(
+          "API 密钥未配置。请在 .env 文件中配置 GEMINI_API_KEY 和 ELEVENLABS_API_KEY。"
+        );
+      } else {
+        setError(errorMsg);
+      }
     } finally {
       setLoading(false);
     }
@@ -251,6 +266,22 @@ function RecapContent() {
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
                 <p className="text-muted-foreground">加载项目中...</p>
+              </div>
+            ) : error ? (
+              <div className="text-center py-8">
+                <div className="text-6xl mb-4">⚠️</div>
+                <p className="text-red-600 mb-4">{error}</p>
+                <div className="bg-muted/50 rounded-lg p-4 text-left max-w-md mx-auto">
+                  <p className="text-sm font-semibold mb-2">快速修复：</p>
+                  <ol className="text-sm space-y-1 list-decimal list-inside">
+                    <li>复制 <code>.env.example</code> 为 <code>.env.local</code></li>
+                    <li>在 <code>.env.local</code> 中配置你的 API 密钥</li>
+                    <li>重启开发服务器</li>
+                  </ol>
+                </div>
+                <Button onClick={() => window.location.href = "/projects"} className="mt-6">
+                  前往项目管理
+                </Button>
               </div>
             ) : projects.length === 0 ? (
               <div className="text-center py-8">
