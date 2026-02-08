@@ -16,7 +16,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ArrowLeft, Upload, MoreVertical, Trash2, Eye } from "lucide-react";
-import { projectsApi, videosApi, type Video } from "@/lib/api";
+import type { Video } from "@/lib/db/schema";
+
+interface Project {
+  id: number;
+  name: string;
+  description: string | null | undefined;
+  videoCount: number;
+  totalDuration: string;
+  status: "ready" | "processing" | "error";
+  progress: number;
+  currentStep: string | null | undefined;
+  createdAt: Date;
 
 interface Project {
   id: number;
@@ -49,10 +60,13 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
       }
 
       // 并行加载项目详情和视频列表
-      const [projectResponse, videosResponse] = await Promise.all([
-        projectsApi.getById(id),
-        projectsApi.getVideos(id),
+      const [projectRes, videosRes] = await Promise.all([
+        fetch(`/api/projects/${id}`),
+        fetch(`/api/projects/${id}/videos`),
       ]);
+
+      const projectResponse = await projectRes.json();
+      const videosResponse = await videosRes.json();
 
       if (projectResponse.success && projectResponse.data) {
         setProject(projectResponse.data);
@@ -114,13 +128,16 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
     }
 
     try {
-      const response = await videosApi.delete(videoId);
+      const response = await fetch(`/api/videos/${videoId}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
 
-      if (response.success) {
+      if (data.success) {
         // 重新加载视频列表
         await loadData();
       } else {
-        alert(response.message || "删除视频失败");
+        alert(data.message || "删除视频失败");
       }
     } catch (err) {
       alert(err instanceof Error ? err.message : "删除视频失败");

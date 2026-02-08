@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Upload, X, Film, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { uploadVideos } from "@/lib/upload/video";
-import { projectsApi } from "@/lib/api";
 
 interface UploadVideoDialogProps {
   projectId?: number;
@@ -85,15 +84,24 @@ export function UploadVideoDialog({ projectId, onUploadComplete }: UploadVideoDi
           const result = successResults[i];
           if (result.data) {
             try {
-              await projectsApi.uploadVideo(projectId, {
-                filename: result.data.filename,
-                filePath: result.data.filePath,
-                fileSize: result.data.fileSize,
-                durationMs: result.data.durationMs,
-                width: result.data.width,
-                height: result.data.height,
-                fps: result.data.fps,
+              const response = await fetch(`/api/projects/${projectId}/videos`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  filename: result.data.filename,
+                  filePath: result.data.filePath,
+                  fileSize: result.data.fileSize,
+                  durationMs: result.data.durationMs,
+                  width: result.data.width,
+                  height: result.data.height,
+                  fps: result.data.fps,
+                }),
               });
+              const data = await response.json();
+
+              if (!data.success) {
+                throw new Error(data.message || '创建视频记录失败');
+              }
 
               // 更新进度（创建记录占 50%）
               const progress = 50 + Math.round(((i + 1) / successResults.length) * 50);
