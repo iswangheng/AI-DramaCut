@@ -12,6 +12,7 @@ export type {
   Scene,
   VideoAnalysis,
   HighlightMoment,
+  ViralMoment,  // 添加 ViralMoment 别名
   Storyline,
   RecapScript,
   // ElevenLabs 类型

@@ -390,6 +390,150 @@ export class ElevenLabsClient {
     const match = outputFormat.match(/^(mp3|pcm|wav|opus)/);
     return match ? match[1] : 'mp3';
   }
+
+  /**
+   * 生成语音解说（符合 IElevenLabsAPI 接口契约）
+   * 将文本转换为语音并保存为文件，提取词语时间戳
+   *
+   * @param text 文案内容
+   * @param options 选项
+   * @returns TTSResult 包含 audioPath, durationMs, wordTimings
+   */
+  async generateNarration(
+    text: string,
+    options?: {
+      voice?: string;      // 默认: eleven_multilingual_v2
+      model?: string;      // 默认: eleven_multilingual_v2
+      stability?: number;  // 0-1
+      outputPath?: string;  // 输出文件路径
+    }
+  ): Promise<ElevenLabsResponse<{
+    audioPath: string;
+    durationMs: number;
+    wordTimings: import('../types/api-contracts').Word[];
+    format: string;
+  }>> {
+    const {
+      voice = 'eleven_multilingual_v2',
+      model = 'eleven_multilingual_v2',
+      stability = 0.5,
+      outputPath
+    } = options || {};
+
+    try {
+      // 1. 调用 TTS 生成音频
+      const response = await this.textToSpeech({
+        text,
+        voice,
+        model,
+        stability,
+      });
+
+      if (!response.success || !response.data) {
+        return {
+          success: false,
+          error: response.error || 'TTS generation failed',
+        };
+      }
+
+      // 2. 生成输出文件路径（如果未指定）
+      if (!outputPath) {
+        const timestamp = Date.now();
+        const format = this.parseAudioFormat(elevenlabsConfig.outputFormat);
+        outputPath = `./outputs/voiceover_${timestamp}.${format}`;
+      }
+
+      // 3. 确保输出目录存在
+      const dir = outputPath.substring(0, outputPath.lastIndexOf('/'));
+      if (dir && !require('fs').existsSync(dir)) {
+        require('fs').mkdirSync(dir, { recursive: true });
+      }
+
+      // 4. 保存音频文件
+      const { execSync } = require('child_process');
+      const fs = require('fs');
+
+      fs.writeFileSync(outputPath, response.data.audioBuffer);
+
+      console.log(`✅ TTS 音频已保存: ${outputPath}`);
+      console.log(`   大小: ${(response.data.audioBuffer.length / 1024).toFixed(2)} KB`);
+
+      // 5. 获取音频时长（使用 ffprobe）
+      let durationMs = 0;
+      try {
+        const ffprobeOutput = execSync(
+          `ffprobe -v quiet -show_entries -of json "${outputPath}"`,
+          { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }
+        );
+        const metadata = JSON.parse(ffprobeOutput);
+        durationMs = Math.round(parseFloat(metadata.format.duration) * 1000);
+      } catch (error) {
+        console.warn('⚠️  无法获取音频时长，使用估算值');
+        // 根据文本长度估算（假设平均语速）
+        const estimatedWordsPerSecond = 3;
+        const wordCount = text.split(/\s+/).length;
+        durationMs = Math.round((wordCount / estimatedWordsPerSecond) * 1000);
+      }
+
+      // 6. 提取 wordTimings（如果有）
+      // ElevenLabs API 在 response headers 中返回 word timings
+      // 需要使用特殊的 API 端点
+
+      // TODO: 实现 wordTimings 提取
+      // 当前使用文本分割作为临时方案
+      const wordTimings: import('../types/api-contracts').Word[] = this.extractWordTimingsFromText(
+        text,
+        durationMs
+      );
+
+      const format = this.parseAudioFormat(elevenlabsConfig.outputFormat);
+
+      return {
+        success: true,
+        data: {
+          audioPath: outputPath,
+          durationMs,
+          wordTimings,
+          format,
+        },
+      };
+    } catch (error) {
+      if (error instanceof Error) {
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+      return {
+        success: false,
+        error: 'Unknown error occurred',
+      };
+    }
+  }
+
+  /**
+   * 从文本提取 wordTimings（临时方案）
+   * 等待 ElevenLabs API 的完整 wordTimings 支持
+   */
+  private extractWordTimingsFromText(
+    text: string,
+    totalDurationMs: number
+  ): import('../types/api-contracts').Word[] {
+    const words = text.split(/\s+/);
+    const msPerWord = totalDurationMs / words.length;
+
+    return words.map((word, index) => {
+      const startMs = Math.floor(index * msPerWord);
+      const endMs = Math.floor((index + 1) * msPerWord);
+
+      return {
+        text: word,
+        startMs,
+        endMs,
+        timestampMs: startMs,
+      };
+    });
+  }
 }
 
 // ============================================

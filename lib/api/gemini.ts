@@ -49,15 +49,28 @@ export interface VideoAnalysis {
 }
 
 /**
- * 高光候选点
+ * 病毒式传播时刻（高光候选点）
+ * 符合 types/api-contracts.ts 接口契约
  */
 export interface HighlightMoment {
-  timestampMs: number;
-  reason: string; // 推荐理由
-  viralScore: number;
-  category: 'conflict' | 'emotional' | 'reversal' | 'climax' | 'other';
-  suggestedDuration?: number; // 建议持续时间（秒）
+  timestampMs: number;     // 时间戳（毫秒）
+  type: "plot_twist" | "reveal" | "conflict" | "emotional" | "climax"; // 匹配接口契约
+  confidence: number;      // 置信度 (0-1)
+  description: string;     // 描述（对应原来的 reason）
+  suggestedStartMs: number; // 建议开始时间（毫秒）
+  suggestedEndMs: number;   // 建议结束时间（毫秒）
+
+  // 保留原有字段以兼容现有代码
+  viralScore?: number;     // 爆款分数
+  category?: 'conflict' | 'emotional' | 'reversal' | 'climax' | 'other'; // 原分类
+  suggestedDuration?: number; // 原建议时长（秒），可转换计算 EndMs
 }
+
+/**
+ * ViralMoment 类型别名
+ * 完全符合 types/api-contracts.ts 接口契约
+ */
+export type ViralMoment = HighlightMoment;
 
 /**
  * 故事线
@@ -401,6 +414,91 @@ ${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)} - ${th
       ...response,
       data: parsed.highlights,
     };
+  }
+
+  /**
+   * 检测病毒式传播时刻（模式 A - 高光智能切片）
+   * 符合 types/api-contracts.ts 接口契约
+   *
+   * @param videoPath 视频文件路径
+   * @param config 配置选项
+   * @returns ViralMoment[] 完全符合接口契约
+   */
+  async detectViralMoments(
+    videoPath: string,
+    config?: {
+      minConfidence?: number;
+      maxResults?: number;
+    }
+  ): Promise<GeminiResponse<ViralMoment[]>> {
+    const { minConfidence = 0.7, maxResults = 10 } = config || {};
+
+    // 首先进行视频分析
+    const analysisResponse = await this.analyzeVideo(videoPath);
+
+    if (!analysisResponse.success || !analysisResponse.data) {
+      return {
+        success: false,
+        error: analysisResponse.error || 'Failed to analyze video',
+      };
+    }
+
+    const analysis = analysisResponse.data;
+
+    // 然后检测高光时刻
+    const highlightsResponse = await this.findHighlights(analysis, maxResults);
+
+    if (!highlightsResponse.success || !highlightsResponse.data) {
+      return {
+        success: false,
+        error: highlightsResponse.error || 'Failed to find highlights',
+      };
+    }
+
+    // 转换 HighlightMoment 为 ViralMoment（符合接口契约）
+    const viralMoments: ViralMoment[] = highlightsResponse.data.map((highlight) => {
+      const timestampMs = highlight.timestampMs;
+      const suggestedDuration = highlight.suggestedDuration || 60; // 默认 60 秒
+
+      return {
+        timestampMs,
+        type: this.mapCategoryToType(highlight.category), // 映射 category 到 type
+        confidence: highlight.viralScore / 10, // 转换 0-10 到 0-1
+        description: highlight.reason,
+        suggestedStartMs: timestampMs, // 开始时间
+        suggestedEndMs: timestampMs + (suggestedDuration * 1000), // 结束时间（毫秒）
+
+        // 保留原有字段
+        viralScore: highlight.viralScore,
+        category: highlight.category,
+        suggestedDuration: highlight.suggestedDuration,
+      };
+    });
+
+    // 过滤低于置信度的结果
+    const filtered = viralMoments.filter(vm => vm.confidence >= minConfidence);
+
+    return {
+      ...highlightsResponse,
+      data: filtered,
+    };
+  }
+
+  /**
+   * 映射 category 到 type
+   */
+  private mapCategoryToType(
+    category: string
+  ): 'plot_twist' | 'reveal' | 'conflict' | 'emotional' | 'climax' {
+    const mapping: Record<string, 'plot_twist' | 'reveal' | 'conflict' | 'emotional' | 'climax'> = {
+      'reversal': 'plot_twist',
+      'climax': 'emotional',
+      'conflict': 'conflict',
+      'emotional': 'emotional',
+      'other': 'climax',
+    };
+
+    return mapping[category] || 'climax';
   }
 
   /**
