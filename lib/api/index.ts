@@ -1,0 +1,30 @@
+// ============================================
+// API 客户端统一导出
+// ============================================
+
+export { GeminiClient, geminiClient } from './gemini';
+export { ElevenLabsClient, elevenlabsClient } from './elevenlabs';
+
+// 导出类型
+export type {
+  // Gemini 类型
+  GeminiResponse,
+  Scene,
+  VideoAnalysis,
+  HighlightMoment,
+  Storyline,
+  RecapScript,
+  // ElevenLabs 类型
+  ElevenLabsResponse,
+  WordTimestamp,
+  TTSOptions,
+  TTSResult,
+  Voice,
+  Model,
+  // 通用错误类型
+  APIError,
+  NetworkError,
+  TimeoutError,
+  AuthenticationError,
+  RateLimitError,
+} from './types';
