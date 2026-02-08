@@ -4,6 +4,7 @@
  */
 
 export * from './metadata';
+export * from './shot-detection';
+
 // 后续会添加：
-// export * from './shot-detection';
 // export * from './upload';
