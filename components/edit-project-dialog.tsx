@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2 } from "lucide-react";
+import { Loader2, Edit } from "lucide-react";
 
 interface EditProjectDialogProps {
   projectId: number;
@@ -91,6 +91,7 @@ export function EditProjectDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm">
+          <Edit className="w-4 h-4 mr-2" />
           编辑
         </Button>
       </DialogTrigger>
