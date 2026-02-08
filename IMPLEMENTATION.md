@@ -362,6 +362,67 @@ npx tsx scripts/test-sampling.ts ./video.mp4 scene-based 50
 
 ---
 
+### 7. FFmpeg 进度监控功能（2025-02-08）
+Agent 3 - 视频处理核心开发
+
+#### 核心功能
+- ✅ **实时进度解析** - 解析 FFmpeg stderr 输出中的进度信息
+- ✅ **进度回调机制** - 支持 onProgress 回调函数
+- ✅ **带进度封装** - trimVideoWithProgress、mixAudioWithProgress、normalizeFrameRateWithProgress
+- ✅ **WebSocket 集成** - 实时更新前端 UI
+
+#### 文件结构
+```
+lib/ffmpeg/
+├── progress.ts            # 进度监控模块
+├── utils.ts               # 基础工具函数
+├── types.ts               # 类型定义
+└── index.ts               # 导出入口
+
+scripts/
+└── test-ffmpeg-progress.ts # 测试脚本
+
+docs/
+└── FFMPEG-PROGRESS.md      # 功能文档
+```
+
+#### 使用示例
+```typescript
+// 视频裁剪 + 进度监控
+await trimVideoWithProgress({
+  inputPath: './video.mp4',
+  outputPath: './output.mp4',
+  startTimeMs: 5000,
+  durationMs: 30000,
+  totalDuration: 120,
+  onProgress: (progress, currentTime, totalTime) => {
+    console.log(`进度: ${progress.toFixed(1)}%`);
+    // 通过 WebSocket 发送到前端
+    ws.send(JSON.stringify({ progress, currentTime, totalTime }));
+  }
+});
+```
+
+#### 测试命令
+```bash
+# 测试视频裁剪进度
+npx tsx scripts/test-ffmpeg-progress.ts ./test.mp4 trim
+
+# 测试音频混合进度
+npx tsx scripts/test-ffmpeg-progress.ts ./test.mp4 mix
+
+# 测试帧率对齐进度
+npx tsx scripts/test-ffmpeg-progress.ts ./test.mp4 normalize
+```
+
+#### 技术亮点
+- **实时反馈**: 每 0.5-1 秒更新一次进度
+- **高精度解析**: 正则匹配 time= 字段
+- **异步执行**: 使用 spawn 替代 execSync
+- **UI 集成**: 完美支持 WebSocket 实时更新
+
+---
+
 ## 📚 参考资源
 
 - **Remotion 官方文档**: https://www.remotion.dev/
