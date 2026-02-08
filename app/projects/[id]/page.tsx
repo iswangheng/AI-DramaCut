@@ -28,17 +28,6 @@ interface Project {
   progress: number;
   currentStep: string | null | undefined;
   createdAt: Date;
-
-interface Project {
-  id: number;
-  name: string;
-  description: string | null | undefined;
-  videoCount: number;
-  totalDuration: string;
-  status: "ready" | "processing" | "error";
-  progress: number;
-  currentStep: string | null | undefined;
-  createdAt: Date;
 }
 
 function ProjectDetailContent({ projectId }: { projectId: string }) {
