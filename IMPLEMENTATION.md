@@ -270,24 +270,120 @@ mixAudio({
 
 ## 🎯 下一步计划
 
-### 阶段 2：模式 A - 高光智能切片
-- [ ] 集成 Gemini 3 视频分析 API
-- [ ] 实现病毒式桥段检测
-- [ ] 构建毫秒级微调 UI
-- [ ] 实现实时预览功能
+> **📋 详细路线图**: 请查看 [ROADMAP.md](./ROADMAP.md) 获取完整的项目路线图和技术架构图。
 
-### 阶段 3：模式 B - 深度解说矩阵
-- [ ] 集成 ElevenLabs TTS
-- [ ] 实现故事线提取
-- [ ] 构建语义搜索系统
-- [ ] 实现自动音画匹配
+### 📊 当前进度总览
 
-### 阶段 4：任务队列与性能
-- [ ] 集成 BullMQ 任务队列
-- [ ] 实现 WebSocket 进度更新
-- [ ] 优化渲染性能
+```
+✅ P0 阶段: 基础视频处理 (100% 完成 - 6 个功能)
+✅ P1 阶段: 高级视频功能 (100% 完成 - 3 个功能)
+🔴 P2 阶段: 核心业务逻辑 (0% 待开发 - 17 个任务)
+🟢 P3 阶段: 性能优化 (0% 待开发 - 5 个任务)
+```
+
+### 🔴 P2 阶段：核心业务逻辑（优先级最高）
+
+#### 模块 1：基础设施（P2-I）
+
+**目标**: 搭建任务队列和实时通信基础设施
+
+| 任务 ID | 功能 | 技术实现 | 预估工期 | 状态 |
+|---------|------|----------|----------|------|
+| P2-I1 | BullMQ Worker 处理器 | `lib/queue/workers.ts` | 3小时 | 🔴 待开发 |
+| P2-I2 | WebSocket 进度推送 | `lib/server.ts` 集成 | 2小时 | 🔴 待开发 |
+| P2-I3 | API 路由集成 | `app/api/*/route.ts` | 1天 | 🔴 待开发 |
+| P2-I4 | 前端 UI 框架 | `components/ui/` | 2天 | 🔴 待开发 |
+| P2-I5 | 错误处理和重试 | 指数退避策略 | 2小时 | 🔴 待开发 |
+
+#### 模块 2：模式 A - 高光智能切片（P2-A）
+
+**目标**: 实现端到端的高光切片功能
+
+| 任务 ID | 功能 | 技术实现 | 预估工期 | 状态 |
+|---------|------|----------|----------|------|
+| P2-A1 | Gemini 高光检测 API | `geminiClient.findHighlights()` | 2小时 | 🔴 待开发 |
+| P2-A2 | 高光片段提取 | `trimVideoWithProgress()` | 3小时 | 🔴 待开发 |
+| P2-A3 | 毫秒级微调 UI | 时间轴 + 精度按钮 | 1天 | 🔴 待开发 |
+| P2-A4 | 实时预览功能 | VideoPlayer + currentTime sync | 1天 | 🔴 待开发 |
+| P2-A5 | 切片导出功能 | `trimVideoWithProgress()` + WebSocket | 2小时 | 🔴 待开发 |
+
+**技术流程**:
+```
+用户上传视频
+  ↓
+[P2-A1] 调用 Gemini findHighlights()
+  返回: [{ timestamp: 30000, type: 'reversal', confidence: 0.95 }]
+  ↓
+[P2-A2] 自动提取高光片段（前后各 30 秒）
+  使用 trimVideoWithProgress()
+  ↓
+[P2-A3] 用户毫秒级微调（±100ms/±500ms/±1000ms）
+  UI 组件: 时间轴 + 按钮
+  ↓
+[P2-A4] 实时预览切点
+  VideoPlayer with currentTime sync
+  ↓
+[P2-A5] 导出最终切片
+  使用 trimVideoWithProgress() + WebSocket 进度推送
+```
+
+#### 模块 3：模式 B - 深度解说矩阵（P2-B）
+
+**目标**: 实现端到端的解说视频生成
+
+| 任务 ID | 功能 | 技术实现 | 预估工期 | 状态 |
+|---------|------|----------|----------|------|
+| P2-B1 | 故事线提取 API | `geminiClient.extractStorylines()` | 2小时 | 🔴 待开发 |
+| P2-B2 | 解说文案生成 | `geminiClient.generateRecapScripts()` | 2小时 | 🔴 待开发 |
+| P2-B3 | ElevenLabs TTS 集成 | `elevenlabsClient.textToSpeech()` | 3小时 | 🔴 待开发 |
+| P2-B4 | 语义搜索系统 | 向量检索（需安装向量数据库）| 2天 | 🔴 待开发 |
+| P2-B5 | 自动音画匹配 | 语义相似度计算 | 1天 | 🔴 待开发 |
+| P2-B6 | 多片段渲染 | `renderMultiClipComposition()` | 3小时 | 🔴 待开发 |
+| P2-B7 | 四轨道混音 | `createStandardMix()` | 2小时 | 🔴 待开发 |
+
+**技术流程**:
+```
+用户上传长视频
+  ↓
+[P2-B1] 调用 Gemini extractStorylines()
+  返回: [{ id: 'storyline_1', title: '女主发现未婚夫出轨', segments: [...] }]
+  ↓
+[P2-B2] 调用 Gemini generateRecapScripts()
+  返回: [{ style: 'suspense', content: '观众朋友们，接下来的一幕将震惊所有人...' }]
+  ↓
+[P2-B3] 调用 ElevenLabs TTS
+  返回: { audioBuffer: <Buffer>, alignment: [{ word: '观众', startMs: 0, endMs: 300 }] }
+  ↓
+[P2-B4] 语义搜索匹配片段
+  将解说词向量化 → 与视频片段标签匹配
+  ↓
+[P2-B5] 自动音画匹配
+  根据解说内容选择最佳视频片段
+  ↓
+[P2-B6] 多片段组合渲染
+  renderMultiClipComposition({ clips: matchedSegments, subtitles: alignment_to_subtitles(alignment) })
+  ↓
+[P2-B7] 四轨道混音
+  createStandardMix({ voiceover: TTS音频, bgm: 情绪BGM, sfx: 转场音效 })
+  ↓
+✅ 输出完整解说视频
+```
+
+### 🟢 P3 阶段：性能优化（功能增强）
+
+**优先级**: 🟢 中低（功能增强）
+
+| 任务 ID | 功能 | 预估工期 | 状态 |
+|---------|------|----------|------|
+| P3-O1 | 并发渲染优化 | 1天 | 🔴 待开发 |
+| P3-O2 | 缓存机制 | 3小时 | 🔴 待开发 |
+| P3-O3 | 视频质量预设 | 2小时 | 🔴 待开发 |
+| P3-O4 | 更多转场效果 | 3小时 | 🔴 待开发 |
+| P3-O5 | 批量处理优化 | 1天 | 🔴 待开发 |
 
 ---
+
+## 📚 参考资源
 
 ### 6. 关键帧采样功能（2025-02-08）
 Agent 3 - 视频处理核心开发
