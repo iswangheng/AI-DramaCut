@@ -32,7 +32,7 @@ DramaGen AI 是一款面向短剧/漫剧剪辑师、投放运营及自媒体博�
 
 ## ✨ 当前状态
 
-**版本**: v0.5.0
+**版本**: v0.6.0
 **更新时间**: 2026-02-08
 
 ### 已完成 ✅
@@ -43,6 +43,7 @@ DramaGen AI 是一款面向短剧/漫剧剪辑师、投放运营及自媒体博�
 | - 数据库（SQLite + Drizzle） | ✅ | 100% |
 | - 任务队列（BullMQ + Redis） | ✅ | 100% |
 | - WebSocket 实时通信 | ✅ | 100% |
+| - P0 错误处理机制 | ✅ | 100% |
 | **素材管理** | ✅ 完成 | 95% |
 | - 项目管理（CRUD + 搜索） | ✅ | 100% |
 | - 视频管理（上传 + 删除） | ✅ | 100% |
@@ -62,6 +63,15 @@ DramaGen AI 是一款面向短剧/漫剧剪辑师、投放运营及自媒体博�
 | **自动化处理流程** | ✅ 完成 | 100% |
 | - 任务队列系统 | ✅ | 100% |
 | - 数据层架构 | ✅ | 100% |
+| **高光切片模式** | ✅ 完成 | 95% |
+| - AI 高光检测（Gemini） | ✅ | 100% |
+| - 数据转换层（ViralMoment → Highlight） | ✅ | 100% |
+| - 完整 API 层 | ✅ | 100% |
+| - FFmpeg 毫秒级切片 | ✅ | 100% |
+| - 渲染 Worker（断点续传） | ✅ | 100% |
+| - 批量渲染支持 | ✅ | 100% |
+| - 实时进度推送 | ✅ | 100% |
+| - 前端 UI | 🟡 部分完成 | 70% |
 
 ### 部分完成 🟡
 
@@ -83,17 +93,17 @@ DramaGen AI 是一款面向短剧/漫剧剪辑师、投放运营及自媒体博�
 
 | 模块 | 状态 | 完成度 |
 |------|------|--------|
-| **高光切片模式** | 🔴 未开发 | 0% |
-| - AI 高光检测 | 🔴 待开发 | 0% |
-| - 毫秒级微调 UI | 🔴 待开发 | 0% |
-| - 实时预览功能 | 🔴 待开发 | 0% |
-| - 批量切片生成 | 🔴 待开发 | 0% |
+| **高光切片前端集成** | 🔴 待开发 | 0% |
+| - 渲染按钮和进度条 | 🔴 待开发 | 0% |
+| - 毫秒级微调控件集成 | 🔴 待开发 | 0% |
+| - 视频预览播放器 | 🔴 待开发 | 0% |
 | **音画匹配系统** | 🔴 未开发 | 0% |
 | - 语义向量化 | 🔴 待开发 | 0% |
 | - 相似度匹配算法 | 🔴 待开发 | 0% |
 | - 候选画面推荐 | 🔴 待开发 | 0% |
 
 **详细路线图**: 请查看 [ROADMAP.md](./ROADMAP.md) 和 [IMPLEMENTATION.md](./IMPLEMENTATION.md)
+**进度追踪**: 请查看 [PROGRESS.md](./PROGRESS.md) - 详细的已完成和未完成工作清单
 
 ---
 
@@ -624,12 +634,152 @@ npm run test:coverage
 
 ---
 
+## 🔧 故障排查
+
+### 问题 1: Redis 连接失败
+
+**错误信息**: `Error: connect ECONNREFUSED 127.0.0.1:6379`
+
+**解决方案**:
+```bash
+# macOS
+brew services start redis
+
+# Linux
+sudo systemctl start redis
+
+# 验证
+redis-cli ping
+# 应该返回: PONG
+```
+
+---
+
+### 问题 2: Worker 进程启动失败
+
+**错误信息**: `Gemini API key is not configured`
+
+**解决方案**:
+1. 检查 `.env.local` 是否存在
+2. 确认 `YUNWU_API_KEY` 或 `GEMINI_API_KEY` 已配置
+3. 重新启动 Worker:
+   ```bash
+   pkill -f "tsx.*workers"
+   npx tsx scripts/workers.ts
+   ```
+
+---
+
+### 问题 3: FFmpeg 未找到
+
+**错误信息**: `Error: FFmpeg not found`
+
+**解决方案**:
+```bash
+# macOS
+brew install ffmpeg
+
+# Linux
+sudo apt install -y ffmpeg
+
+# 验证
+ffmpeg -version
+```
+
+---
+
+### 问题 4: 数据库文件不存在
+
+**错误信息**: `Database file not found`
+
+**解决方案**:
+```bash
+# 初始化数据库
+npm run db:init
+
+# 或重置数据库（开发环境）
+npm run db:reset
+```
+
+---
+
+### 问题 5: 端口被占用
+
+**错误信息**: `Error: listen EADDRINUSE: address already in use :::3000`
+
+**解决方案**:
+```bash
+# 查找占用端口的进程
+lsof -i :3000
+
+# 杀死进程
+kill -9 <PID>
+
+# 或修改 .env.local 中的 PORT 配置
+PORT=3001
+```
+
+---
+
+### 问题 6: 任务一直处于"等待中"状态
+
+**原因**: Worker 进程未运行
+
+**解决方案**:
+```bash
+# 检查 Worker 进程
+ps aux | grep "tsx.*workers"
+
+# 如果未运行，启动 Worker
+npx tsx scripts/workers.ts
+
+# 查看日志
+tail -f logs/worker.log
+```
+
+---
+
+### 问题 7: 视频上传失败
+
+**可能原因**:
+1. 文件过大（>2GB）
+2. 格式不支持
+3. 磁盘空间不足
+
+**解决方案**:
+```bash
+# 检查磁盘空间
+df -h
+
+# 检查文件格式
+ffmpeg -i your-video.mp4
+
+# 查看上传日志
+tail -f logs/worker.log | grep upload
+```
+
+---
+
+## 📚 获取帮助
+
+如果遇到以上文档未覆盖的问题：
+
+1. **查看日志**: `tail -f logs/worker.log`
+2. **查看测试指南**: [docs/TESTING-GUIDE.md](docs/TESTING-GUIDE.md)
+3. **提交 Issue**: https://github.com/iswangheng/AI-DramaCut/issues
+4. **查看开发文档**: [CLAUDE.md](CLAUDE.md)
+
+---
+
 ## 📖 文档
 
 ### 项目文档
+- **[环境设置指南](docs/SETUP.md)** - 完整的本地开发环境设置步骤 ⭐
+- **[测试指南](docs/TESTING-GUIDE.md)** - 功能测试和验证步骤 ⭐
 - **[项目路线图](ROADMAP.md)** - 完整的开发路线图和任务清单
 - **[实施进度](IMPLEMENTATION.md)** - 功能完成度和技术细节
 - **[CLAUDE.md](CLAUDE.md)** - 项目架构和开发规范
+- **[部署文档](DEPLOYMENT.md)** - 云服务器部署指南
 
 ### 视频处理文档
 - **[关键帧采样](docs/KEY-FRAME-SAMPLING.md)** - 降低 Gemini Token 消耗
