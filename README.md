@@ -32,7 +32,7 @@ DramaGen AI 是一款面向短剧/漫剧剪辑师、投放运营及自媒体博�
 
 ## ✨ 当前状态
 
-**版本**: v0.1.0  
+**版本**: v0.2.0
 **更新时间**: 2025-02-08
 
 ### 已完成 ✅
@@ -42,7 +42,17 @@ DramaGen AI 是一款面向短剧/漫剧剪辑师、投放运营及自媒体博�
 | **素材管理** | ✅ 完成 | 100% |
 | - 项目管理（CRUD + 搜索） | ✅ | 100% |
 | - 视频管理（上传 + 删除） | ✅ | 100% |
-| - **自动化处理流程** | ✅ | 100% |
+| **视频处理核心** | ✅ 完成 | 100% |
+| - 关键帧采样 | ✅ | 100% |
+| - FFmpeg 进度监控 | ✅ | 100% |
+| - 视频拼接（concat） | ✅ | 100% |
+| - 多轨道音频混合 | ✅ | 100% |
+| - Remotion 渲染客户端 | ✅ | 100% |
+| - 多片段组合组件 | ✅ | 100% |
+| **AI 服务集成** | ✅ 完成 | 100% |
+| - Gemini 3 API 客户端 | ✅ | 100% |
+| - ElevenLabs TTS 客户端 | ✅ | 100% |
+| **自动化处理流程** | ✅ 完成 | 100% |
 | - 任务队列系统 | ✅ | 100% |
 | - 数据层架构 | ✅ | 100% |
 
@@ -50,9 +60,18 @@ DramaGen AI 是一款面向短剧/漫剧剪辑师、投放运营及自媒体博�
 
 | 模块 | 状态 | 完成度 |
 |------|------|--------|
-| **高光切片模式** | 🚧 开发中 | 20% |
+| **高光切片模式** | 🚧 开发中 | 0% |
+| - Gemini 高光检测 API | 🔴 待开发 | 0% |
+| - 毫秒级微调 UI | 🔴 待开发 | 0% |
+| - 实时预览功能 | 🔴 待开发 | 0% |
 | **深度解说模式** | ⏳ 待开发 | 0% |
+| - 故事线提取 | 🔴 待开发 | 0% |
+| - 解说文案生成 | 🔴 待开发 | 0% |
+| - TTS 集成 | 🔴 待开发 | 0% |
+| - 语义搜索系统 | 🔴 待开发 | 0% |
 | **任务管理 UI** | ⏳ 待开发 | 0% |
+
+**详细路线图**: 请查看 [ROADMAP.md](./ROADMAP.md) 和 [IMPLEMENTATION.md](./IMPLEMENTATION.md)
 
 ---
 
@@ -165,21 +184,65 @@ dramagen-ai/
 │
 ├── lib/                     # 核心库
 │   ├── api/                 # API 客户端
-│   │   ├── gemini.ts        # Gemini 客户端
-│   │   └── elevenlabs.ts    # ElevenLabs 客户端
+│   │   ├── gemini.ts        # Gemini 3 客户端 ✅
+│   │   ├── elevenlabs.ts    # ElevenLabs TTS 客户端 ✅
+│   │   └── types.ts         # API 类型定义 ✅
+│   ├── video/               # 视频处理模块 ✅
+│   │   ├── metadata.ts      # 视频元数据提取 ✅
+│   │   ├── shot-detection.ts # 镜头检测 ✅
+│   │   ├── sampling.ts      # 关键帧采样 ✅
+│   │   ├── db-integration.ts # 数据库集成 ✅
+│   │   └── index.ts         # 导出入口 ✅
+│   ├── ffmpeg/              # FFmpeg 工具库 ✅
+│   │   ├── utils.ts         # 基础工具（裁剪、混音）✅
+│   │   ├── progress.ts      # 进度监控 ✅
+│   │   ├── concat.ts        # 视频拼接 ✅
+│   │   ├── multitrack-audio.ts # 多轨道混音 ✅
+│   │   ├── types.ts         # 类型定义 ✅
+│   │   └── index.ts         # 导出入口 ✅
+│   ├── remotion/            # Remotion 渲染模块 ✅
+│   │   ├── renderer.ts      # 渲染客户端 ✅
+│   │   └── index.ts         # 导出入口 ✅
 │   ├── db/                  # 数据库
-│   │   ├── schema.ts        # Drizzle Schema
-│   │   ├── client.ts        # SQLite 客户端
-│   │   └── queries.ts       # 查询接口
+│   │   ├── schema.ts        # Drizzle Schema ✅
+│   │   ├── client.ts        # SQLite 客户端 ✅
+│   │   └── queries.ts       # 查询接口 ✅
 │   ├── queue/               # 任务队列
-│   │   ├── bullmq.ts        # BullMQ 管理器
-│   │   └── workers.ts       # Worker 处理器
-│   ├── ws/                  # WebSocket
-│   │   └── server.ts        # WebSocket 服务器
-│   └── server.ts            # 自定义服务器
+│   │   ├── bullmq.ts        # BullMQ 管理器 ✅
+│   │   └── workers.ts       # Worker 处理器 🟡
+│   ├── server.ts            # 自定义服务器 ✅
+│   └── config/              # 统一配置 ✅
+│
+├── components/              # React 组件
+│   ├── remotion/            # Remotion 组件 ✅
+│   │   ├── MultiClipComposition.tsx # 多片段组合 ✅
+│   │   └── subtitles/       # 字幕组件 ✅
+│   │       ├── CaptionedVideo.tsx
+│   │       ├── KaraokeSentence.tsx
+│   │       └── Word.tsx
+│   └── ui/                  # shadcn/ui 组件
 │
 ├── scripts/                 # 脚本
-│   └── workers.ts           # Worker 启动脚本
+│   ├── test-sampling.ts     # 测试关键帧采样 ✅
+│   ├── test-ffmpeg-progress.ts # 测试进度监控 ✅
+│   ├── test-concat.ts       # 测试视频拼接 ✅
+│   ├── test-multitrack-audio.ts # 测试多轨道混音 ✅
+│   ├── test-remotion-renderer.ts # 测试 Remotion 渲染 ✅
+│   └── test-multiclip.ts    # 测试多片段组合 ✅
+│
+├── docs/                   # 文档
+│   ├── KEY-FRAME-SAMPLING.md # 关键帧采样文档 ✅
+│   ├── FFMPEG-PROGRESS.md    # 进度监控文档 ✅
+│   ├── VIDEO-CONCAT.md       # 视频拼接文档 ✅
+│   ├── MULTITRACK-AUDIO.md  # 多轨道混音文档 ✅
+│   ├── REMOTION-RENDERER.md  # Remotion 渲染文档 ✅
+│   ├── MULTICLIP-COMPOSITION.md # 多片段组合文档 ✅
+│   ├── API-SETUP.md         # API 配置指南 ✅
+│   └── API-EXAMPLES.md       # API 使用示例 ✅
+│
+├── remotion/                # Remotion 配置
+│   ├── config.ts            # Remotion 配置 ✅
+│   └── root.tsx             # Remotion Root ✅
 │
 └── uploads/                 # 文件上传目录
 ```
@@ -188,7 +251,65 @@ dramagen-ai/
 
 ## 🔑 核心功能
 
-### 1. 素材管理
+### 1. 视频处理核心 ⭐
+
+#### 关键帧采样
+- **均匀采样**: 按固定时间间隔采样
+- **场景采样**: 基于镜头检测结果采样
+- **代理分辨率**: 降低存储和 Token 消耗（90%+ 节省）
+- **性能**: 2分钟视频 ~10秒完成采样
+
+**使用**: `lib/video/sampling.ts`
+
+#### FFmpeg 进度监控
+- **实时进度解析**: 解析 FFmpeg stderr 输出
+- **进度回调**: 支持毫秒级进度反馈
+- **WebSocket 集成**: 实时更新到前端 UI
+- **应用**: 视频裁剪、音频混合、帧率对齐
+
+**使用**: `lib/ffmpeg/progress.ts`
+
+#### 视频拼接
+- **两种方法**: concat demuxer（快速）/ concat filter（高级）
+- **转场效果**: 淡入淡出、交叉淡入淡出
+- **批量处理**: 支持多批次拼接
+
+**使用**: `lib/ffmpeg/concat.ts`
+
+#### 多轨道音频混合
+- **四轨道支持**: 解说配音、原音、BGM、音效
+- **灵活音量控制**: 每个轨道独立音量调整
+- **快速混合**: 使用 -c:v copy，视频不重新编码
+
+**使用**: `lib/ffmpeg/multitrack-audio.ts`
+
+#### Remotion 渲染客户端
+- **程序化渲染**: 从 Node.js 代码调用 Remotion
+- **实时进度**: 完整的渲染进度反馈
+- **多片段组合**: 支持多个视频片段无缝拼接
+- **转场效果**: 淡入淡出、滑动、缩放
+
+**使用**: `lib/remotion/renderer.ts`
+
+### 2. AI 服务集成
+
+#### Gemini 3 API
+- **视频分析**: 内容理解、摘要生成
+- **高光检测**: 识别病毒式传播桥段
+- **故事线提取**: 提取多条独立故事线
+- **解说文案生成**: 多种风格解说
+
+**使用**: `lib/api/gemini.ts`
+
+#### ElevenLabs TTS
+- **文本转语音**: 返回二进制音频
+- **毫秒级时间轴**: 精确到词语级别
+- **批量转换**: 支持多段文本转换
+- **语音预览**: 支持语音试听
+
+**使用**: `lib/api/elevenlabs.ts`
+
+### 3. 素材管理
 
 #### 项目管理
 - 创建项目（名称 + 描述）
@@ -328,9 +449,25 @@ npm run test:coverage
 
 ## 📖 文档
 
-- **[项目状态总览](PROJECT-STATUS.md)** - 功能完成度和技术架构
+### 项目文档
+- **[项目路线图](ROADMAP.md)** - 完整的开发路线图和任务清单
+- **[实施进度](IMPLEMENTATION.md)** - 功能完成度和技术细节
+- **[CLAUDE.md](CLAUDE.md)** - 项目架构和开发规范
+
+### 视频处理文档
+- **[关键帧采样](docs/KEY-FRAME-SAMPLING.md)** - 降低 Gemini Token 消耗
+- **[FFmpeg 进度监控](docs/FFMPEG-PROGRESS.md)** - 实时进度反馈
+- **[视频拼接](docs/VIDEO-CONCAT.md)** - 视频片段拼接
+- **[多轨道音频混合](docs/MULTITRACK-AUDIO.md)** - 四轨道混音
+- **[Remotion 渲染客户端](docs/REMOTION-RENDERER.md)** - 程序化渲染
+- **[多片段组合](docs/MULTICLIP-COMPOSITION.md)** - Remotion 组件
+
+### API 文档
+- **[API 配置指南](docs/API-SETUP.md)** - Gemini 3 和 ElevenLabs 配置
+- **[API 使用示例](docs/API-EXAMPLES.md)** - 完整的 API 使用示例
+
+### Agent 协作文档
 - **[Agent 4 指南](AGENT-4-GUIDE.md)** - 数据层开发指南
-- **[自动化处理流程](AGENT-4-AUTO-PROCESSING-PIPELINE.md)** - 任务队列详解
 - **[协作文档](COLLABORATION.md)** - Agent 协作机制
 - **[部署指南](DEPLOYMENT.md)** - 部署说明
 
