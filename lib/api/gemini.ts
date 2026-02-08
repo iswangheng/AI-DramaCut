@@ -4,6 +4,7 @@
 // ============================================
 
 import { geminiConfig } from '../config';
+import { withRetry, type RetryOptions } from './utils/retry';
 
 // ============================================
 // 类型定义
@@ -108,8 +109,9 @@ export class GeminiClient {
   private temperature: number;
   private maxTokens: number;
   private timeout: number;
+  private retryOptions: RetryOptions; // 添加重试配置
 
-  constructor() {
+  constructor(retryOptions?: RetryOptions) {
     // 验证必需的配置
     if (!geminiConfig.apiKey) {
       throw new Error('Gemini API key is not configured. Please set GEMINI_API_KEY or YUNWU_API_KEY in .env');
@@ -124,6 +126,17 @@ export class GeminiClient {
 
     // 检查是否使用 yunwu.ai 代理
     this.isYunwu = this.endpoint.includes('yunwu.ai');
+
+    // 配置重试选项
+    this.retryOptions = {
+      maxRetries: retryOptions?.maxRetries || 3,
+      initialDelay: retryOptions?.initialDelay || 1000,
+      maxDelay: retryOptions?.maxDelay || 10000,
+      backoffMultiplier: retryOptions?.backoffMultiplier || 2,
+      onRetry: (attempt, error) => {
+        console.warn(`⚠️  Gemini API 请求失败，第 ${attempt} 次重试...`, error.message);
+      },
+    };
   }
 
   // 添加私有属性标识是否使用 yunwu.ai
@@ -179,89 +192,113 @@ export class GeminiClient {
   }
 
   /**
-   * 通用 Gemini API 调用方法（公共方法，用于测试）
+   * 内部 API 调用方法（实际执行请求，用于重试）
+   */
+  private async executeApiCall(
+    prompt: string,
+    systemInstruction?: string,
+    controller?: AbortController
+  ): Promise<{ text: string; usage?: any }> {
+    // 构建请求体
+    const requestBody: Record<string, unknown> = {
+      contents: [
+        {
+          parts: [
+            {
+              text: prompt,
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: this.temperature,
+        maxOutputTokens: this.maxTokens,
+      },
+    };
+
+    // 添加系统指令（如果提供）
+    if (systemInstruction) {
+      requestBody.systemInstruction = {
+        parts: [
+          {
+            text: systemInstruction,
+          },
+        ],
+      };
+    }
+
+    // 发送请求
+    const apiUrl = this.isYunwu
+      ? `${this.endpoint}/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`
+      : `${this.endpoint}/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody),
+      signal: controller?.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      const error = new Error(`Gemini API error: ${response.status} - ${errorText}`) as any;
+      error.statusCode = response.status;
+      throw error;
+    }
+
+    const data = await response.json();
+
+    // 提取生成的文本
+    const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const usage = data.usageMetadata
+      ? {
+          promptTokens: data.usageMetadata.promptTokenCount || 0,
+          completionTokens: data.usageMetadata.candidatesTokenCount || 0,
+          totalTokens: data.usageMetadata.totalTokenCount || 0,
+        }
+      : undefined;
+
+    if (!generatedText) {
+      throw new Error('Empty response from API');
+    }
+
+    return { text: generatedText, usage };
+  }
+
+  /**
+   * 通用 Gemini API 调用方法（带重试机制）
    */
   async callApi(prompt: string, systemInstruction?: string): Promise<GeminiResponse> {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-      // 构建请求体
-      const requestBody: Record<string, unknown> = {
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: this.temperature,
-          maxOutputTokens: this.maxTokens,
+      // 使用 withRetry 包装 API 调用
+      const result = await withRetry(
+        async () => {
+          return await this.executeApiCall(prompt, systemInstruction, controller);
         },
-      };
-
-      // 添加系统指令（如果提供）
-      if (systemInstruction) {
-        requestBody.systemInstruction = {
-          parts: [
-            {
-              text: systemInstruction,
-            },
-          ],
-        };
-      }
-
-      // 发送请求
-      // yunwu.ai 使用 Gemini 原生格式
-      const apiUrl = this.isYunwu
-        ? `${this.endpoint}/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`  // 非流式端点
-        : `${this.endpoint}/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
-
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      });
+        {
+          ...this.retryOptions,
+          onRetry: (attempt, error) => {
+            console.warn(
+              `⚠️  Gemini API 请求失败，第 ${attempt} 次重试...`,
+              error.message
+            );
+          },
+        }
+      );
 
       clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
-      }
-
-      const data = await response.json();
-
-      // 根据不同的 API 格式提取生成的文本
-      let generatedText: string;
-      let usage: any;
-
-      // yunwu.ai 和标准 Gemini 都返回相同的原生格式
-      generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      usage = data.usageMetadata
-        ? {
-            promptTokens: data.usageMetadata.promptTokenCount || 0,
-            completionTokens: data.usageMetadata.candidatesTokenCount || 0,
-            totalTokens: data.usageMetadata.totalTokenCount || 0,
-          }
-        : undefined;
-
-      if (!generatedText) {
-        throw new Error('Empty response from API');
-      }
-
       return {
         success: true,
-        data: generatedText,
-        usage,
+        data: result.text,
+        usage: result.usage,
       };
     } catch (error) {
       if (error instanceof Error) {

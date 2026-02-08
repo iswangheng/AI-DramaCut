@@ -4,6 +4,7 @@
 // ============================================
 
 import { elevenlabsConfig } from '../config';
+import { withRetry, type RetryOptions } from './utils/retry';
 
 // ============================================
 // 类型定义
@@ -96,8 +97,9 @@ export class ElevenLabsClient {
   private endpoint: string;
   private timeout: number;
   private defaultModel: string;
+  private retryOptions: RetryOptions; // 添加重试配置
 
-  constructor() {
+  constructor(retryOptions?: RetryOptions) {
     // 验证必需的配置
     if (!elevenlabsConfig.apiKey) {
       throw new Error('ElevenLabs API key is not configured. Please set ELEVENLABS_API_KEY in .env');
@@ -107,10 +109,50 @@ export class ElevenLabsClient {
     this.endpoint = elevenlabsConfig.endpoint;
     this.timeout = elevenlabsConfig.timeout;
     this.defaultModel = elevenlabsConfig.defaultModel;
+
+    // 配置重试选项
+    this.retryOptions = {
+      maxRetries: retryOptions?.maxRetries || 3,
+      initialDelay: retryOptions?.initialDelay || 1000,
+      maxDelay: retryOptions?.maxDelay || 10000,
+      backoffMultiplier: retryOptions?.backoffMultiplier || 2,
+      onRetry: (attempt, error) => {
+        console.warn(`⚠️  ElevenLabs API 请求失败，第 ${attempt} 次重试...`, error.message);
+      },
+    };
   }
 
   /**
-   * 通用 HTTP 请求方法（用于 JSON 响应）
+   * 内部请求执行方法（用于重试）
+   */
+  private async executeRequest<T>(
+    path: string,
+    options: RequestInit = {},
+    controller?: AbortController
+  ): Promise<{ data: T; response: Response }> {
+    const response = await fetch(`${this.endpoint}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': this.apiKey,
+        ...options.headers,
+      },
+      signal: controller?.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      const error = new Error(`ElevenLabs API error: ${response.status} - ${errorText}`) as any;
+      error.statusCode = response.status;
+      throw error;
+    }
+
+    const data = await response.json();
+    return { data, response };
+  }
+
+  /**
+   * 通用 HTTP 请求方法（带重试机制，用于 JSON 响应）
    */
   private async request<T>(
     path: string,
@@ -120,28 +162,19 @@ export class ElevenLabsClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-      const response = await fetch(`${this.endpoint}${path}`, {
-        ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          'xi-api-key': this.apiKey,
-          ...options.headers,
+      // 使用 withRetry 包装请求
+      const result = await withRetry(
+        async () => {
+          return await this.executeRequest<T>(path, options, controller);
         },
-        signal: controller.signal,
-      });
+        this.retryOptions
+      );
 
       clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`);
-      }
-
-      const data = await response.json();
-
       return {
         success: true,
-        data,
+        data: result.data,
       };
     } catch (error) {
       if (error instanceof Error) {
@@ -208,7 +241,60 @@ export class ElevenLabsClient {
   }
 
   /**
-   * 文本转语音（TTS）
+   * 内部 TTS 执行方法（用于重试）
+   */
+  private async executeTextToSpeech(
+    text: string,
+    voiceId: string,
+    modelId: string,
+    outputFormat: string,
+    stability: number,
+    similarityBoost: number,
+    controller?: AbortController
+  ): Promise<{ audioBuffer: Buffer; format: string }> {
+    // 构建 URL
+    const url = new URL(`${this.endpoint}/text-to-speech/${voiceId}`);
+    if (outputFormat) {
+      url.searchParams.append('output_format', outputFormat);
+    }
+
+    // 发送 TTS 请求
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': this.apiKey,
+      },
+      body: JSON.stringify({
+        text,
+        model_id: modelId,
+        voice_settings: {
+          stability,
+          similarity_boost: similarityBoost,
+        },
+      }),
+      signal: controller?.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      const error = new Error(`TTS generation failed: ${response.status} - ${errorText}`) as any;
+      error.statusCode = response.status;
+      throw error;
+    }
+
+    // 获取音频二进制数据
+    const arrayBuffer = await response.arrayBuffer();
+    const audioBuffer = Buffer.from(arrayBuffer);
+
+    // 解析音频格式
+    const format = this.parseAudioFormat(outputFormat);
+
+    return { audioBuffer, format };
+  }
+
+  /**
+   * 文本转语音（TTS，带重试机制）
    * 返回音频二进制数据
    */
   async textToSpeech(options: TTSOptions): Promise<ElevenLabsResponse<TTSResult>> {
@@ -241,53 +327,39 @@ export class ElevenLabsClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-      // 构建 URL
-      const url = new URL(`${this.endpoint}/text-to-speech/${voiceId}`);
-      if (outputFormat) {
-        url.searchParams.append('output_format', outputFormat);
-      }
-
-      // 发送 TTS 请求
-      const response = await fetch(url.toString(), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'xi-api-key': this.apiKey,
-        },
-        body: JSON.stringify({
-          text,
-          model_id: modelId,
-          voice_settings: {
+      // 使用 withRetry 包装 TTS 请求
+      const result = await withRetry(
+        async () => {
+          return await this.executeTextToSpeech(
+            text,
+            voiceId,
+            modelId,
+            outputFormat,
             stability,
-            similarity_boost: similarityBoost,
-          },
-        }),
-        signal: controller.signal,
-      });
+            similarityBoost,
+            controller
+          );
+        },
+        this.retryOptions
+      );
 
       clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`TTS generation failed: ${response.status} - ${errorText}`);
-      }
-
-      // 获取音频二进制数据
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = Buffer.from(arrayBuffer);
-
-      // 解析音频格式
-      const format = this.parseAudioFormat(outputFormat);
 
       return {
         success: true,
         data: {
-          audioBuffer,
-          format,
+          audioBuffer: result.audioBuffer,
+          format: result.format,
         },
       };
     } catch (error) {
       if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          return {
+            success: false,
+            error: `TTS generation timeout after ${this.timeout}ms`,
+          };
+        }
         return {
           success: false,
           error: error.message,
