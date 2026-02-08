@@ -496,6 +496,71 @@ normalizeFrameRate(inputPath, outputPath, 30);
 
 ---
 
+### ✅ 第六阶段：视频元数据提取系统（2025-02-08）
+
+**核心功能** (`lib/video/metadata.ts`):
+- ✅ `getMetadata()` - 获取视频元数据
+  - 使用 Remotion + FFprobe 双重提取
+  - 返回完整的 VideoMetadata 对象
+  - 符合 `types/api-contracts.ts` 接口契约
+  - 支持时长、分辨率、帧率、编码、比特率、文件大小
+
+- ✅ `getBatchMetadata()` - 批量获取元数据
+  - 并发处理多个视频
+  - Promise.allSettled 容错处理
+
+- ✅ `validateVideoMetadata()` - 视频验证
+  - 时长验证（≥1 秒）
+  - 分辨率验证（≥720p）
+  - 帧率验证（25-60 fps）
+  - 编码格式验证
+
+- ✅ `formatMetadata()` - 格式化输出
+  - 人类可读的元数据展示
+  - 用于调试和日志
+
+**HTTP API** (`app/api/video/metadata/route.ts`):
+- ✅ `POST /api/video/metadata` - 获取元数据
+- ✅ `GET /api/video/metadata?videoPath=...` - 快速查询
+- ✅ 返回元数据 + 验证结果
+
+**测试工具** (`scripts/test-metadata.ts`):
+- ✅ 命令行测试脚本
+- ✅ 支持单个视频测试
+- ✅ 显示验证结果
+
+**文档** (`lib/video/README.md`):
+- ✅ 完整的使用文档
+- ✅ API 集成示例
+- ✅ 测试说明
+
+**数据结构** (符合接口契约):
+```typescript
+interface VideoMetadata {
+  duration: number;      // 时长（秒）
+  width: number;         // 宽度（像素）
+  height: number;        // 高度（像素）
+  fps: number;           // 帧率
+  bitrate: number;       // 比特率
+  codec: string;         // 编码格式
+  size: number;          // 文件大小（字节）
+}
+```
+
+**集成状态**:
+- ✅ Agent UI: 可通过 `/api/video/metadata` 调用
+- ✅ Agent Data: 元数据可直接存入 videos 表
+- ✅ Agent API: Gemini 分析时可使用元数据
+
+**性能**:
+- 单个视频: ~300ms
+- 批量处理: 并发执行
+
+**阻塞项**:
+- ⏸️ `detectShots()` 功能被阻塞
+  - 原因：shots 表缺少 thumbnailPath 字段
+  - 需要：Agent 4 添加字段后继续
+
 ---
 
 ## ⚠️ 核心架构要求（2025-02-08 更新）

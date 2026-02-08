@@ -58,6 +58,81 @@
 - ✅ Composition 配置
 - ✅ 示例字幕数据文件
 
+### 5. API 配置系统（2025-02-08）
+完成 Gemini 3 和 ElevenLabs API 的完整集成。
+
+#### 环境变量配置
+- ✅ `.env.example` - 完整的环境变量模板（137 行配置）
+- ✅ `.env.local` - 本地开发环境配置
+- ✅ `env.d.ts` - TypeScript 环境变量类型定义
+
+#### 统一配置管理 (`lib/config/`)
+- ✅ `index.ts` - 集中管理所有配置模块
+  - `config` - 应用基础配置
+  - `geminiConfig` - Gemini 3 API 配置
+  - `elevenlabsConfig` - ElevenLabs API 配置
+  - `dbConfig` - 数据库配置
+  - `storageConfig` - 文件存储配置
+  - `ffmpegConfig` - FFmpeg 配置
+  - `queueConfig` - BullMQ 任务队列配置
+  - `wsConfig` - WebSocket 配置
+
+#### Gemini 3 API 客户端 (`lib/api/gemini.ts`)
+- ✅ 支持 yunwu.ai 代理（国内用户）
+- ✅ 支持标准 Google Gemini API
+- ✅ 自动适配不同的 API 格式
+- ✅ 完整的 TypeScript 类型定义
+- ✅ 主要方法：
+  - `analyzeVideo()` - 视频内容分析
+  - `findHighlights()` - 高光时刻检测（模式 A）
+  - `extractStorylines()` - 故事线提取（模式 B）
+  - `generateRecapScripts()` - 解说文案生成（模式 B）
+
+#### ElevenLabs API 客户端 (`lib/api/elevenlabs.ts`)
+- ✅ TTS 文本转语音（返回二进制音频）
+- ✅ 支持获取语音列表（用户语音 + 共享语音库）
+- ✅ 支持获取模型列表
+- ✅ 批量文本转语音
+- ✅ 语音预览功能
+- ✅ 完整的 TypeScript 类型定义
+- ✅ 主要方法：
+  - `getVoices()` - 获取用户语音
+  - `getSharedVoices()` - 获取共享语音库（支持筛选）
+  - `getModels()` - 获取可用模型
+  - `textToSpeech()` - 文本转语音
+  - `batchTextToSpeech()` - 批量转换
+  - `getVoicePreview()` - 语音预览
+
+#### API 测试工具 (`scripts/test-api.ts`)
+- ✅ API 配置测试脚本（284 行）
+- ✅ 测试 4 项：配置加载、Gemini API、ElevenLabs API、TTS 生成
+- ✅ 命令：`npm run test:api`
+
+#### 测试结果
+```
+✅ 配置加载成功
+✅ Gemini API 连接成功 (yunwu.ai + gemini-3-pro-preview)
+✅ ElevenLabs API 连接成功 (37 个语音)
+✅ ElevenLabs TTS 生成成功 (30 KB MP3)
+状态: 4 成功 | 0 失败
+```
+
+#### 文档
+- ✅ `docs/API-SETUP.md` - API 配置指南（167 行）
+- ✅ `docs/API-EXAMPLES.md` - API 使用示例（445 行）
+
+#### 新增依赖
+```json
+{
+  "dependencies": {
+    "dotenv": "^17.2.4"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0"
+  }
+}
+```
+
 ---
 
 ## 📂 项目结构
@@ -79,17 +154,32 @@
 │       └── utils/
 │           └── load-font.ts  # 字体加载工具
 ├── lib/
+│   ├── config/                # 统一配置管理
+│   │   └── index.ts
+│   ├── api/                   # API 客户端
+│   │   ├── gemini.ts          # Gemini 3 API
+│   │   ├── elevenlabs.ts      # ElevenLabs API
+│   │   ├── types.ts
+│   │   └── index.ts
 │   └── ffmpeg/               # FFmpeg 工具库
 │       ├── index.ts
 │       ├── utils.ts
 │       └── types.ts
+├── scripts/                   # 工具脚本
+│   └── test-api.ts           # API 测试脚本
 ├── remotion/                 # Remotion 配置
 │   ├── config.ts
 │   ├── root.tsx
 │   └── index.ts
+├── docs/                     # 文档
+│   ├── API-SETUP.md          # API 配置指南
+│   └── API-EXAMPLES.md       # API 使用示例
 ├── public/                   # 静态资源
 │   ├── example-subtitle.json
 │   └── subtitle-props.json
+├── .env.example              # 环境变量模板
+├── .env.local                # 本地环境配置（不提交）
+├── env.d.ts                  # 环境变量类型定义
 ├── package.json
 ├── tsconfig.json
 ├── tailwind.config.ts
