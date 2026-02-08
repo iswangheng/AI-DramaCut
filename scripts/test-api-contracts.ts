@@ -167,10 +167,24 @@ async function main() {
   console.log('✅ 接口契约测试完成');
   console.log('========================================\n');
 
+  console.log('📋 已完成的 API 接口:');
+  console.log('   1. ✅ detectViralMoments() - 检测病毒式传播时刻');
+  console.log('      POST /api/gemini/detect-viral-moments');
+  console.log('');
+  console.log('   2. ✅ extractStorylines() - 提取故事线');
+  console.log('      POST /api/gemini/extract-storylines');
+  console.log('');
+  console.log('   3. ✅ generateNarration() - 生成解说文案');
+  console.log('      POST /api/gemini/generate-narration');
+  console.log('');
+  console.log('   4. ✅ generateNarration() - TTS 语音合成');
+  console.log('      POST /api/elevenlabs/generate-narration');
+  console.log('');
+
   console.log('💡 下一步:');
   console.log('   1. 运行完整测试: npm run test:api');
-  console.log('   2. 测试 ViralMoment: POST /api/gemini/detect-viral-moments');
-  console.log('   3. 测试 TTS: POST /api/elevenlabs/generate-narration');
+  console.log('   2. 测试完整流程：上传视频 -> 分析 -> 生成文案 -> TTS');
+  console.log('   3. 优化：流式响应、错误重试、wordTimings 精确提取');
   console.log('');
 
   process.exit(0);

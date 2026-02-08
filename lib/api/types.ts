@@ -35,13 +35,29 @@ export interface VideoAnalysis {
   durationMs: number;
 }
 
+/**
+ * 病毒式传播时刻（高光候选点）
+ * 符合 types/api-contracts.ts 接口契约
+ */
 export interface HighlightMoment {
-  timestampMs: number;
-  reason: string;
-  viralScore: number;
-  category: 'conflict' | 'emotional' | 'reversal' | 'climax' | 'other';
-  suggestedDuration?: number;
+  timestampMs: number;     // 时间戳（毫秒）
+  type: "plot_twist" | "reveal" | "conflict" | "emotional" | "climax"; // 匹配接口契约
+  confidence: number;      // 置信度 (0-1)
+  description: string;     // 描述（对应原来的 reason）
+  suggestedStartMs: number; // 建议开始时间（毫秒）
+  suggestedEndMs: number;   // 建议结束时间（毫秒）
+
+  // 保留原有字段以兼容现有代码
+  viralScore?: number;     // 爆款分数
+  category?: 'conflict' | 'emotional' | 'reversal' | 'climax' | 'other'; // 原分类
+  suggestedDuration?: number; // 原建议时长（秒），可转换计算 EndMs
 }
+
+/**
+ * ViralMoment 类型别名
+ * 完全符合 types/api-contracts.ts 接口契约
+ */
+export type ViralMoment = HighlightMoment;
 
 export interface Storyline {
   id: string;

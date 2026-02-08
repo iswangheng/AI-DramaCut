@@ -502,9 +502,99 @@ ${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)} - ${th
   }
 
   /**
-   * 提取故事线（模式 B）
+   * 提取故事线（符合 types/api-contracts.ts 接口契约）
+   *
+   * @param videoPath 视频文件路径
+   * @param minCount 最少故事线数量（默认：3）
+   * @returns Storyline[] 故事线数组
    */
-  async extractStorylines(analysis: VideoAnalysis): Promise<GeminiResponse<Storyline[]>> {
+  async extractStorylines(
+    videoPath: string,
+    minCount: number = 3
+  ): Promise<GeminiResponse<Storyline[]>> {
+    // 1. 分析视频
+    const analysisResponse = await this.analyzeVideo(videoPath);
+
+    if (!analysisResponse.success || !analysisResponse.data) {
+      return {
+        success: false,
+        error: analysisResponse.error || 'Failed to analyze video',
+      };
+    }
+
+    const analysis = analysisResponse.data;
+
+    // 2. 提取故事线
+    const storylinesResponse = await this.extractStorylinesFromAnalysis(analysis);
+
+    if (!storylinesResponse.success || !storylinesResponse.data) {
+      return storylinesResponse;
+    }
+
+    let storylines = storylinesResponse.data;
+
+    // 3. 过滤：如果故事线数量不足，按吸引力分数排序后取前 N 个
+    if (storylines.length < minCount) {
+      console.warn(`⚠️  只提取到 ${storylines.length} 条故事线，少于要求的 ${minCount} 条`);
+    }
+
+    // 按吸引力分数降序排序
+    storylines.sort((a, b) => b.attractionScore - a.attractionScore);
+
+    return {
+      ...storylinesResponse,
+      data: storylines,
+    };
+  }
+
+  /**
+   * 生成解说文案（符合 types/api-contracts.ts 接口契约）
+   *
+   * @param storyline 故事线对象
+   * @param style 文案风格：hook | suspense | emotional | roast
+   * @returns string 纯文本文案
+   */
+  async generateNarration(
+    storyline: Storyline,
+    style: "hook" | "suspense" | "emotional" | "roast"
+  ): Promise<GeminiResponse<string>> {
+    // 1. 生成解说文案（调用现有方法）
+    const scriptsResponse = await this.generateRecapScripts(storyline, [style]);
+
+    if (!scriptsResponse.success || !scriptsResponse.data) {
+      return {
+        success: false,
+        error: scriptsResponse.error || 'Failed to generate narration',
+      };
+    }
+
+    const scripts = scriptsResponse.data;
+
+    if (scripts.length === 0) {
+      return {
+        success: false,
+        error: 'No scripts generated',
+      };
+    }
+
+    // 2. 提取第一个脚本的文本内容
+    const script = scripts[0];
+
+    // 3. 组合标题 + 段落文本
+    const fullText = `${script.title}\n\n${script.paragraphs.map(p => p.text).join('\n\n')}`;
+
+    return {
+      success: true,
+      data: fullText,
+    };
+  }
+
+  /**
+   * 提取故事线（模式 B）
+   * @deprecated 使用 extractStorylinesFromAnalysis 或公共方法 extractStorylines
+   * @internal
+   */
+  async extractStorylinesFromAnalysis(analysis: VideoAnalysis): Promise<GeminiResponse<Storyline[]>> {
     const systemInstruction = `你是一位资深的故事架构师。
 你的任务是从短剧中提取所有独立的故事线，并分析每条线的吸引力。`;
 
