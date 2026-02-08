@@ -55,12 +55,17 @@ lib/api/
 - ✅ ElevenLabs TTS 集成 (textToSpeech, generateNarration)
 - ✅ ViralMoment 接口修复（符合 types/api-contracts.ts）
 - ✅ TTSResult 接口增强（audioPath, durationMs, wordTimings）
-- ✅ HTTP API 路由: /api/gemini/detect-viral-moments, /api/elevenlabs/generate-narration
+- ✅ HTTP API 路由:
+  - /api/gemini/detect-viral-moments
+  - /api/gemini/extract-storylines (新增)
+  - /api/gemini/generate-narration (新增)
+  - /api/elevenlabs/generate-narration
 
 **当前任务**:
 - 📋 待办：流式响应处理
 - 📋 待办：错误重试机制
 - 📋 待办：完善 wordTimings 提取（当前是临时方案）
+- 📋 待办：API 性能优化（缓存、批量处理）
 
 **依赖配置**:
 ```bash
@@ -423,6 +428,20 @@ git commit -m "chore: 解决 <Agent A> 和 <Agent B> 的冲突"
   - POST /api/elevenlabs/generate-narration
 - ✅ 创建接口契约测试脚本 (scripts/test-api-contracts.ts)
 - 提交: 001f321
+
+**20:00** - Agent 2 完成剩余接口契约实现
+- ✅ 实现 extractStorylines(videoPath, minCount?) 方法
+  - 符合 IGeminiAPI 接口契约
+  - 内部调用 analyzeVideo + extractStorylinesFromAnalysis
+  - 支持按吸引力分数排序
+- ✅ 实现 generateNarration(storyline, style) 方法（Gemini）
+  - 符合 IGeminiAPI 接口契约
+  - 返回纯文本文案（非 RecapScript 对象）
+- ✅ 创建 HTTP API 路由：
+  - POST /api/gemini/extract-storylines
+  - POST /api/gemini/generate-narration
+- ✅ IGeminiAPI 和 IElevenLabsAPI 接口契约 100% 符合
+- 提交: a7827bf
 
 ---
 
