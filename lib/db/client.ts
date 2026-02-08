@@ -168,6 +168,9 @@ class DatabaseClient {
         viral_score REAL,
         start_frame INTEGER NOT NULL,
         end_frame INTEGER NOT NULL,
+        thumbnail_path TEXT,
+        semantic_tags TEXT,
+        embeddings TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )

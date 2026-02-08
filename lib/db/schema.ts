@@ -69,6 +69,11 @@ export const shots = sqliteTable('shots', {
   startFrame: integer('start_frame').notNull(),            // 起始帧号
   endFrame: integer('end_frame').notNull(),                // 结束帧号
 
+  // Agent 3 需求：缩略图和语义标签
+  thumbnailPath: text('thumbnail_path'),                   // 缩略图路径（相对路径或完整路径）
+  semanticTags: text('semantic_tags'),                      // 语义标签（JSON 数组，由 Agent 2 填充）
+  embeddings: text('embeddings'),                          // 向量表示（JSON 数组，由 Agent 2 填充）
+
   ...timestamps,
 });
 
