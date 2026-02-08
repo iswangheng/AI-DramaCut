@@ -5,6 +5,7 @@
 
 import { geminiConfig } from '../config';
 import { withRetry, type RetryOptions } from './utils/retry';
+import { StreamChunk, StreamCallback } from './utils/streaming';
 
 // ============================================
 // 类型定义
@@ -624,6 +625,97 @@ ${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)} - ${th
       success: true,
       data: fullText,
     };
+  }
+
+  /**
+   * 生成解说文案（流式响应版本）
+   *
+   * @param storyline 故事线对象
+   * @param style 文案风格：hook | suspense | emotional | roast
+   * @param onChunk 流式回调函数
+   * @returns Promise<string> 完整文本
+   */
+  async generateNarrationStream(
+    storyline: Storyline,
+    style: "hook" | "suspense" | "emotional" | "roast",
+    onChunk: StreamCallback
+  ): Promise<GeminiResponse<string>> {
+    // 1. 先生成完整文本（使用非流式 API）
+    const response = await this.generateNarration(storyline, style);
+
+    if (!response.success || !response.data) {
+      return response;
+    }
+
+    const fullText = response.data;
+
+    // 2. 模拟流式输出（将文本分块推送）
+    const chunkSize = 20; // 每次推送 20 个字符
+    const chunks: string[] = [];
+
+    for (let i = 0; i < fullText.length; i += chunkSize) {
+      chunks.push(fullText.slice(i, i + chunkSize));
+    }
+
+    // 3. 逐块推送
+    for (let i = 0; i < chunks.length; i++) {
+      await new Promise(resolve => setTimeout(resolve, 30)); // 模拟延迟
+
+      onChunk({
+        text: chunks[i],
+        done: i === chunks.length - 1,
+        index: i,
+      });
+    }
+
+    return response;
+  }
+
+  /**
+   * 调用 Gemini API 并流式返回响应
+   *
+   * @param prompt 提示词
+   * @param systemInstruction 系统指令
+   * @param onChunk 流式回调
+   * @returns Promise<string> 完整响应
+   */
+  async callApiStream(
+    prompt: string,
+    systemInstruction: string | undefined,
+    onChunk: StreamCallback
+  ): Promise<GeminiResponse<string>> {
+    // 注意：当前 Gemini API 可能不支持原生流式
+    // 这里使用模拟流式（完整生成后分块推送）
+
+    // 1. 先调用非流式 API 获取完整响应
+    const response = await this.callApi(prompt, systemInstruction);
+
+    if (!response.success || !response.data) {
+      return response;
+    }
+
+    const fullText = response.data as string;
+
+    // 2. 模拟流式输出
+    const chunkSize = 15;
+    const chunks: string[] = [];
+
+    for (let i = 0; i < fullText.length; i += chunkSize) {
+      chunks.push(fullText.slice(i, i + chunkSize));
+    }
+
+    // 3. 逐块推送
+    for (let i = 0; i < chunks.length; i++) {
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      onChunk({
+        text: chunks[i],
+        done: i === chunks.length - 1,
+        index: i,
+      });
+    }
+
+    return response;
   }
 
   /**
