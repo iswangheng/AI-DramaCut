@@ -45,15 +45,17 @@ function ProjectsContent() {
     try {
       setLoading(true);
       setError(null);
-      const response = await projectsApi.list();
+      const response = await fetch('/api/projects');
+      const data: ApiResponse<Project[]> = await response.json();
 
-      if (response.success && response.data) {
+      if (data.success && data.data) {
         // 为每个项目获取统计信息
         const projectsWithStats = await Promise.all(
-          response.data.map(async (project) => {
-            const detailResponse = await projectsApi.getById(project.id!);
-            if (detailResponse.success && detailResponse.data) {
-              return detailResponse.data;
+          data.data.map(async (project) => {
+            const detailRes = await fetch(`/api/projects/${project.id}`);
+            const detailData: ApiResponse<ProjectWithStats> = await detailRes.json();
+            if (detailData.success && detailData.data) {
+              return detailData.data;
             }
             return {
               ...project,
@@ -65,7 +67,7 @@ function ProjectsContent() {
         setProjects(projectsWithStats);
         setFilteredProjects(projectsWithStats);
       } else {
-        setError(response.message || "加载项目列表失败");
+        setError(data.message || "加载项目列表失败");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载项目列表失败");
@@ -90,15 +92,17 @@ function ProjectsContent() {
 
     try {
       setSearching(true);
-      const response = await projectsApi.search(query);
+      const response = await fetch(`/api/projects/search?q=${encodeURIComponent(query)}`);
+      const data: ApiResponse<Project[]> = await response.json();
 
-      if (response.success && response.data) {
+      if (data.success && data.data) {
         // 为搜索结果获取统计信息
         const projectsWithStats = await Promise.all(
-          response.data.map(async (project) => {
-            const detailResponse = await projectsApi.getById(project.id!);
-            if (detailResponse.success && detailResponse.data) {
-              return detailResponse.data;
+          data.data.map(async (project) => {
+            const detailRes = await fetch(`/api/projects/${project.id}`);
+            const detailData: ApiResponse<ProjectWithStats> = await detailRes.json();
+            if (detailData.success && detailData.data) {
+              return detailData.data;
             }
             return {
               ...project,
@@ -120,13 +124,18 @@ function ProjectsContent() {
 
   const handleCreateProject = async (name: string, description?: string) => {
     try {
-      const response = await projectsApi.create({ name, description });
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description }),
+      });
+      const data: ApiResponse<Project> = await response.json();
 
-      if (response.success) {
+      if (data.success) {
         // 重新加载项目列表
         await loadProjects();
       } else {
-        alert(response.message || "创建项目失败");
+        alert(data.message || "创建项目失败");
       }
     } catch (err) {
       alert(err instanceof Error ? err.message : "创建项目失败");
@@ -139,14 +148,17 @@ function ProjectsContent() {
     }
 
     try {
-      const response = await projectsApi.delete(projectId);
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: 'DELETE',
+      });
+      const data: ApiResponse<void> = await response.json();
 
-      if (response.success) {
+      if (data.success) {
         // 从列表中移除
         setFilteredProjects(filteredProjects.filter((p) => p.id !== projectId));
         setProjects(projects.filter((p) => p.id !== projectId));
       } else {
-        alert(response.message || "删除项目失败");
+        alert(data.message || "删除项目失败");
       }
     } catch (err) {
       alert(err instanceof Error ? err.message : "删除项目失败");
