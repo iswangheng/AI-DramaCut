@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { CreateProjectDialog } from "@/components/create-project-dialog";
+import { EditProjectDialog } from "@/components/edit-project-dialog";
+import { EditProjectDialog } from "@/components/edit-project-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -237,6 +239,18 @@ function ProjectsContent() {
                     >
                       <Eye className="w-4 h-4 mr-2" />
                       查看详情
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
+                    >
+                      <EditProjectDialog
+                        projectId={project.id!}
+                        projectName={project.name}
+                        projectDescription={project.description || undefined}
+                        onUpdate={loadProjects}
+                      />
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       className="text-red-600"

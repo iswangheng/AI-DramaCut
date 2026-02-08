@@ -209,6 +209,12 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
       {/* 操作按钮 */}
       <div className="mb-6 flex gap-3">
         <UploadVideoDialog projectId={project.id} onUploadComplete={loadData} />
+        <EditProjectDialog
+          projectId={project.id}
+          projectName={project.name}
+          projectDescription={project.description || undefined}
+          onUpdate={loadData}
+        />
         <Button variant="outline">查看剧情树</Button>
       </div>
 
