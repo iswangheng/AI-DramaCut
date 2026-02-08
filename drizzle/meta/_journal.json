@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1770565379758,
+      "tag": "0000_careless_silver_samurai",
+      "breakpoints": true
+    }
+  ]
+}

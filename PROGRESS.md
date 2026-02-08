@@ -243,6 +243,17 @@
 
 ## 📈 版本历史
 
+### v0.6.1 (2026-02-08 晚间)
+**修复**:
+- ✅ 数据库Schema更新（queue_jobs表添加progress、checkpoint、retry_count列）
+- ✅ 服务重启和缓存清理
+- ✅ 数据库迁移文件生成（drizzle/0000_careless_silver_samurai.sql）
+
+**环境**:
+- ✅ 所有服务正常运行
+- ✅ API配置完整（YUNWU_API_KEY、ELEVENLABS_API_KEY）
+- ✅ 数据库连接稳定
+
 ### v0.6.0 (2026-02-08)
 **新增**:
 - ✅ P0 错误处理和重试机制（断点续传、智能重试、用户友好提示）
