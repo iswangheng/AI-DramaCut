@@ -10,7 +10,6 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { CreateProjectDialog } from "@/components/create-project-dialog";
 import { EditProjectDialog } from "@/components/edit-project-dialog";
-import { EditProjectDialog } from "@/components/edit-project-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
