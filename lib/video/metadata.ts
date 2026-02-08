@@ -81,7 +81,7 @@ export async function getMetadata(videoPath: string): Promise<VideoMetadata> {
   }
 
   // 5. 解析帧率（ffprobe 返回 "30000/1001" 格式）
-  let fps = remotionMetadata.fps;
+  let fps = 30; // 默认帧率
   if (videoStream.r_frame_rate) {
     const [numerator, denominator] = videoStream.r_frame_rate.split('/');
     fps = parseFloat(numerator) / parseFloat(denominator);

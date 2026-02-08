@@ -108,9 +108,13 @@ class DatabaseClient {
       'videos',
     ];
 
+    if (!sqlite) {
+      throw new Error('SQLite 连接未初始化');
+    }
+
     sqlite.transaction(() => {
       tables.forEach((table) => {
-        sqlite.run(`DROP TABLE IF EXISTS ${table}`);
+        sqlite!.exec(`DROP TABLE IF EXISTS ${table}`);
       });
     })();
 
@@ -126,8 +130,12 @@ class DatabaseClient {
   async init() {
     const sqlite = this.getSqlite();
 
+    if (!sqlite) {
+      throw new Error('SQLite 连接未初始化');
+    }
+
     // 创建 videos 表
-    sqlite.run(`
+    sqlite.exec(`
       CREATE TABLE IF NOT EXISTS videos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         filename TEXT NOT NULL,
@@ -147,7 +155,7 @@ class DatabaseClient {
     `);
 
     // 创建 shots 表
-    sqlite.run(`
+    sqlite.exec(`
       CREATE TABLE IF NOT EXISTS shots (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
@@ -166,7 +174,7 @@ class DatabaseClient {
     `);
 
     // 创建 storylines 表
-    sqlite.run(`
+    sqlite.exec(`
       CREATE TABLE IF NOT EXISTS storylines (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
@@ -181,7 +189,7 @@ class DatabaseClient {
     `);
 
     // 创建 highlights 表
-    sqlite.run(`
+    sqlite.exec(`
       CREATE TABLE IF NOT EXISTS highlights (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
@@ -201,7 +209,7 @@ class DatabaseClient {
     `);
 
     // 创建 recap_tasks 表
-    sqlite.run(`
+    sqlite.exec(`
       CREATE TABLE IF NOT EXISTS recap_tasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         storyline_id INTEGER NOT NULL REFERENCES storylines(id) ON DELETE CASCADE,
@@ -218,7 +226,7 @@ class DatabaseClient {
     `);
 
     // 创建 recap_segments 表
-    sqlite.run(`
+    sqlite.exec(`
       CREATE TABLE IF NOT EXISTS recap_segments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         task_id INTEGER NOT NULL REFERENCES recap_tasks(id) ON DELETE CASCADE,
@@ -238,7 +246,7 @@ class DatabaseClient {
     `);
 
     // 创建 queue_jobs 表
-    sqlite.run(`
+    sqlite.exec(`
       CREATE TABLE IF NOT EXISTS queue_jobs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         job_id TEXT NOT NULL UNIQUE,
@@ -256,15 +264,15 @@ class DatabaseClient {
     `);
 
     // 创建索引
-    sqlite.run(`CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status)`);
-    sqlite.run(`CREATE INDEX IF NOT EXISTS idx_shots_video_id ON shots(video_id)`);
-    sqlite.run(`CREATE INDEX IF NOT EXISTS idx_highlights_video_id ON highlights(video_id)`);
-    sqlite.run(`CREATE INDEX IF NOT EXISTS idx_highlights_is_confirmed ON highlights(is_confirmed)`);
-    sqlite.run(`CREATE INDEX IF NOT EXISTS idx_storylines_video_id ON storylines(video_id)`);
-    sqlite.run(`CREATE INDEX IF NOT EXISTS idx_recap_tasks_storyline_id ON recap_tasks(storyline_id)`);
-    sqlite.run(`CREATE INDEX IF NOT EXISTS idx_recap_segments_task_id ON recap_segments(task_id)`);
-    sqlite.run(`CREATE INDEX IF NOT EXISTS idx_queue_jobs_job_id ON queue_jobs(job_id)`);
-    sqlite.run(`CREATE INDEX IF NOT EXISTS idx_queue_jobs_status ON queue_jobs(status)`);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status)`);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_shots_video_id ON shots(video_id)`);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_highlights_video_id ON highlights(video_id)`);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_highlights_is_confirmed ON highlights(is_confirmed)`);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_storylines_video_id ON storylines(video_id)`);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_recap_tasks_storyline_id ON recap_tasks(storyline_id)`);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_recap_segments_task_id ON recap_segments(task_id)`);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_queue_jobs_job_id ON queue_jobs(job_id)`);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_queue_jobs_status ON queue_jobs(status)`);
 
     console.log('✅ 数据库表结构初始化完成');
   }
@@ -275,6 +283,9 @@ class DatabaseClient {
   healthCheck(): boolean {
     try {
       const sqlite = this.getSqlite();
+      if (!sqlite) {
+        return false;
+      }
       const result = sqlite.prepare('SELECT 1').get();
       return result !== undefined;
     } catch (error) {

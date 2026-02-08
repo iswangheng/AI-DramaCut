@@ -12,7 +12,7 @@ export const RemotionRoot: React.FC = () => {
       {/* 字幕视频 Composition */}
       <Composition
         id="CaptionedVideo"
-        component={CaptionedVideo}
+        component={CaptionedVideo as any}
         calculateMetadata={calculateCaptionedVideoMetadata}
         schema={captionedVideoSchema}
         defaultProps={{

@@ -109,21 +109,21 @@ async function testElevenLabsApi(elevenlabsClient: any): Promise<TestResult> {
   try {
     console.log('  → 正在测试 ElevenLabs API 连接...');
 
-    // 获取可用的语音列表
+    // 获取用户语音列表
     const response = await elevenlabsClient.getVoices();
 
     if (response.success && response.data) {
-      const voices = response.data as any;
-      const voiceList = voices.voices || voices;
+      const voices = response.data.voices || [];
       return {
         name: 'ElevenLabs API',
         success: true,
         message: '✅ ElevenLabs API 连接成功',
         data: {
-          voiceCount: Array.isArray(voiceList) ? voiceList.length : 0,
-          preview: Array.isArray(voiceList)
-            ? voiceList.slice(0, 3).map((v: any) => v.name)
-            : [],
+          voiceCount: voices.length,
+          preview: voices.slice(0, 3).map((v: any) => ({
+            id: v.voice_id,
+            name: v.name,
+          })),
         },
       };
     } else {
@@ -170,10 +170,9 @@ async function testElevenLabsTTS(elevenlabsClient: any): Promise<TestResult> {
         success: true,
         message: '✅ ElevenLabs TTS 生成成功',
         data: {
-          duration: response.data.durationMs,
           format: response.data.format,
-          sampleRate: response.data.sampleRate,
-          wordCount: response.data.wordTimestamps.length,
+          audioSize: response.data.audioBuffer.length,
+          audioSizeKB: Math.round(response.data.audioBuffer.length / 1024),
         },
       };
     } else {

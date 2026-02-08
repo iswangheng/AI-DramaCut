@@ -19,13 +19,40 @@ export interface ElevenLabsResponse<T = unknown> {
 }
 
 /**
- * 词语级别的时间戳信息
+ * 语音信息
  */
-export interface WordTimestamp {
-  word: string;
-  startMs: number;
-  endMs: number;
-  confidence?: number;
+export interface Voice {
+  voice_id: string;
+  name: string;
+  category?: 'generated' | 'cloned' | 'premade' | 'professional' | 'famous' | 'high_quality';
+  labels?: Record<string, string>;
+  description?: string;
+  preview_url?: string;
+  available_for_tiers?: string[];
+  language?: string;
+  gender?: string;
+  age?: string;
+  accent?: string;
+}
+
+/**
+ * 共享语音信息
+ */
+export interface SharedVoice {
+  voice_id: string;
+  name: string;
+  accent: string;
+  gender: string;
+  age: string;
+  descriptive: string;
+  use_case: string;
+  category: 'generated' | 'cloned' | 'premade' | 'professional' | 'famous' | 'high_quality';
+  language: string;
+  description: string;
+  preview_url: string;
+  image_url?: string;
+  featured: boolean;
+  free_users_allowed: boolean;
 }
 
 /**
@@ -35,9 +62,9 @@ export interface TTSOptions {
   text: string;
   voiceId?: string;
   modelId?: string;
+  outputFormat?: string;
   stability?: number;
   similarityBoost?: number;
-  outputFormat?: string;
 }
 
 /**
@@ -45,29 +72,19 @@ export interface TTSOptions {
  */
 export interface TTSResult {
   audioBuffer: Buffer; // 音频数据
-  durationMs: number; // 音频时长（毫秒）
-  wordTimestamps: WordTimestamp[]; // 词语级时间戳
   format: string; // 音频格式
-  sampleRate: number; // 采样率
 }
 
 /**
- * 可用的语音列表
- */
-export interface Voice {
-  voice_id: string;
-  name: string;
-  category: string;
-  labels?: Record<string, string>;
-  preview_url?: string;
-}
-
-/**
- * 语音模型列表
+ * 语音模型
  */
 export interface Model {
   model_id: string;
   name: string;
+  can_do_text_to_speech: boolean;
+  can_do_voice_conversion: boolean;
+  can_do_style_transfer: boolean;
+  description?: string;
 }
 
 // ============================================
@@ -78,7 +95,6 @@ export class ElevenLabsClient {
   private apiKey: string;
   private endpoint: string;
   private timeout: number;
-  private defaultVoice: string;
   private defaultModel: string;
 
   constructor() {
@@ -90,12 +106,11 @@ export class ElevenLabsClient {
     this.apiKey = elevenlabsConfig.apiKey;
     this.endpoint = elevenlabsConfig.endpoint;
     this.timeout = elevenlabsConfig.timeout;
-    this.defaultVoice = elevenlabsConfig.defaultVoice;
     this.defaultModel = elevenlabsConfig.defaultModel;
   }
 
   /**
-   * 通用 HTTP 请求方法
+   * 通用 HTTP 请求方法（用于 JSON 响应）
    */
   private async request<T>(
     path: string,
@@ -149,10 +164,40 @@ export class ElevenLabsClient {
   }
 
   /**
-   * 获取可用的语音列表
+   * 获取用户语音列表
    */
-  async getVoices(): Promise<ElevenLabsResponse<Voice[]>> {
-    return this.request<Voice[]>('/voices');
+  async getVoices(): Promise<ElevenLabsResponse<{ voices: Voice[] }>> {
+    return this.request<{ voices: Voice[] }>('/voices');
+  }
+
+  /**
+   * 获取共享语音库
+   */
+  async getSharedVoices(options?: {
+    pageSize?: number;
+    category?: 'professional' | 'famous' | 'high_quality';
+    gender?: string;
+    age?: string;
+    accent?: string;
+    language?: string;
+    search?: string;
+    featured?: boolean;
+  }): Promise<ElevenLabsResponse<{ voices: SharedVoice[]; has_more: boolean }>> {
+    const params = new URLSearchParams();
+
+    if (options?.pageSize) params.append('page_size', options.pageSize.toString());
+    if (options?.category) params.append('category', options.category);
+    if (options?.gender) params.append('gender', options.gender);
+    if (options?.age) params.append('age', options.age);
+    if (options?.accent) params.append('accent', options.accent);
+    if (options?.language) params.append('language', options.language);
+    if (options?.search) params.append('search', options.search);
+    if (options?.featured !== undefined) params.append('featured', options.featured.toString());
+
+    const queryString = params.toString();
+    const path = queryString ? `/shared-voices?${queryString}` : '/shared-voices';
+
+    return this.request<{ voices: SharedVoice[]; has_more: boolean }>(path);
   }
 
   /**
@@ -164,17 +209,17 @@ export class ElevenLabsClient {
 
   /**
    * 文本转语音（TTS）
-   * 支持获取词语级时间戳
+   * 返回音频二进制数据
    */
   async textToSpeech(options: TTSOptions): Promise<ElevenLabsResponse<TTSResult>> {
     try {
       const {
         text,
-        voiceId = this.defaultVoice,
+        voiceId = '21m00Tcm4TlvDq8ikWAM', // 默认使用 "Rachel" 语音
         modelId = this.defaultModel,
+        outputFormat = elevenlabsConfig.outputFormat,
         stability = elevenlabsConfig.stability,
         similarityBoost = elevenlabsConfig.similarityBoost,
-        outputFormat = elevenlabsConfig.outputFormat,
       } = options;
 
       // 验证输入
@@ -196,8 +241,14 @@ export class ElevenLabsClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-      // 发送 TTS 请求（启用时间戳）
-      const response = await fetch(`${this.endpoint}/text-to-speech/${voiceId}/with-timestamps`, {
+      // 构建 URL
+      const url = new URL(`${this.endpoint}/text-to-speech/${voiceId}`);
+      if (outputFormat) {
+        url.searchParams.append('output_format', outputFormat);
+      }
+
+      // 发送 TTS 请求
+      const response = await fetch(url.toString(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -210,8 +261,6 @@ export class ElevenLabsClient {
             stability,
             similarity_boost: similarityBoost,
           },
-          pronunciation_dictionary_locators: [],
-          output_format: outputFormat,
         }),
         signal: controller.signal,
       });
@@ -223,52 +272,18 @@ export class ElevenLabsClient {
         throw new Error(`TTS generation failed: ${response.status} - ${errorText}`);
       }
 
-      // 解析响应（包含音频和时间戳）
-      const data = await response.json();
+      // 获取音频二进制数据
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = Buffer.from(arrayBuffer);
 
-      // 提取音频数据（Base64）
-      const audioBase64 = data.audio_base64 || data.audio;
-      if (!audioBase64) {
-        return {
-          success: false,
-          error: 'No audio data in response',
-        };
-      }
-
-      const audioBuffer = Buffer.from(audioBase64, 'base64');
-
-      // 提取词语时间戳
-      const wordTimestamps: WordTimestamp[] = [];
-      if (data.alignment && Array.isArray(data.alignment)) {
-        let cumulativeTime = 0;
-        for (const item of data.alignment) {
-          wordTimestamps.push({
-            word: item.char || item.word || '',
-            startMs: cumulativeTime,
-            endMs: cumulativeTime + (item.duration || 0),
-            confidence: item.confidence,
-          });
-          cumulativeTime += item.duration || 0;
-        }
-      }
-
-      // 解析音频格式和采样率
+      // 解析音频格式
       const format = this.parseAudioFormat(outputFormat);
-      const sampleRate = this.parseSampleRate(outputFormat);
-
-      // 估算音频时长（如果没有时间戳）
-      const durationMs = wordTimestamps.length > 0
-        ? wordTimestamps[wordTimestamps.length - 1].endMs
-        : this.estimateAudioDuration(audioBuffer, sampleRate);
 
       return {
         success: true,
         data: {
           audioBuffer,
-          durationMs,
-          wordTimestamps,
           format,
-          sampleRate,
         },
       };
     } catch (error) {
@@ -286,14 +301,13 @@ export class ElevenLabsClient {
   }
 
   /**
-   * 批量文本转语音（将长文本分割成多个段落）
+   * 批量文本转语音
    */
   async batchTextToSpeech(
     paragraphs: string[],
     options?: Omit<TTSOptions, 'text'>
   ): Promise<ElevenLabsResponse<TTSResult[]>> {
     const results: TTSResult[] = [];
-    let cumulativeOffset = 0;
 
     for (let i = 0; i < paragraphs.length; i++) {
       const paragraph = paragraphs[i].trim();
@@ -311,19 +325,7 @@ export class ElevenLabsClient {
         };
       }
 
-      // 调整时间戳偏移（基于之前的段落时长）
-      const adjustedTimestamps = response.data.wordTimestamps.map((ts) => ({
-        ...ts,
-        startMs: ts.startMs + cumulativeOffset,
-        endMs: ts.endMs + cumulativeOffset,
-      }));
-
-      results.push({
-        ...response.data,
-        wordTimestamps: adjustedTimestamps,
-      });
-
-      cumulativeOffset += response.data.durationMs;
+      results.push(response.data);
     }
 
     return {
@@ -384,91 +386,9 @@ export class ElevenLabsClient {
   private parseAudioFormat(outputFormat: string): string {
     // mp3_44100_128 -> mp3
     // pcm_16000 -> wav
-    const match = outputFormat.match(/^(mp3|pcm|wav)/);
+    // wav_44100 -> wav
+    const match = outputFormat.match(/^(mp3|pcm|wav|opus)/);
     return match ? match[1] : 'mp3';
-  }
-
-  /**
-   * 解析采样率
-   */
-  private parseSampleRate(outputFormat: string): number {
-    // mp3_44100_128 -> 44100
-    // pcm_16000 -> 16000
-    const match = outputFormat.match(/_(\d+)/);
-    return match ? parseInt(match[1], 10) : 44100;
-  }
-
-  /**
-   * 估算音频时长（基于音频数据大小）
-   */
-  private estimateAudioDuration(audioBuffer: Buffer, sampleRate: number): number {
-    // 简单估算：假设平均比特率为 128 kbps
-    const estimatedBitrate = 128000; // bits per second
-    const durationSeconds = (audioBuffer.length * 8) / estimatedBitrate;
-    return Math.round(durationSeconds * 1000); // 转换为毫秒
-  }
-
-  /**
-   * 将词语时间戳转换为 Remotion 字幕格式
-   */
-  static convertToRemotionSubtitles(wordTimestamps: WordTimestamp[]): Array<{
-    startMs: number;
-    endMs: number;
-    text: string;
-    words: WordTimestamp[];
-  }> {
-    // 将连续的词语合并成句子
-    const sentences: Array<{
-      startMs: number;
-      endMs: number;
-      text: string;
-      words: WordTimestamp[];
-    }> = [];
-
-    let currentSentence: WordTimestamp[] = [];
-    let sentenceStartMs = 0;
-
-    for (let i = 0; i < wordTimestamps.length; i++) {
-      const word = wordTimestamps[i];
-
-      if (currentSentence.length === 0) {
-        sentenceStartMs = word.startMs;
-        currentSentence.push(word);
-      } else {
-        const lastWord = currentSentence[currentSentence.length - 1];
-        const gap = word.startMs - lastWord.endMs;
-
-        // 如果间隔超过 500ms，认为是新句子
-        if (gap > 500) {
-          // 保存当前句子
-          sentences.push({
-            startMs: sentenceStartMs,
-            endMs: lastWord.endMs,
-            text: currentSentence.map((w) => w.word).join(''),
-            words: [...currentSentence],
-          });
-
-          // 开始新句子
-          currentSentence = [word];
-          sentenceStartMs = word.startMs;
-        } else {
-          currentSentence.push(word);
-        }
-      }
-    }
-
-    // 保存最后一个句子
-    if (currentSentence.length > 0) {
-      const lastWord = currentSentence[currentSentence.length - 1];
-      sentences.push({
-        startMs: sentenceStartMs,
-        endMs: lastWord.endMs,
-        text: currentSentence.map((w) => w.word).join(''),
-        words: currentSentence,
-      });
-    }
-
-    return sentences;
   }
 }
 

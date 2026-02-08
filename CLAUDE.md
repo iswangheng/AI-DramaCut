@@ -340,6 +340,107 @@ normalizeFrameRate(inputPath, outputPath, 30);
 
 ---
 
+---
+
+## ⚠️ 核心架构要求（2025-02-08 更新）
+
+### 毫秒级精度（最高优先级）
+- **所有时间戳必须精确到毫秒**
+- 包括：镜头检测、Gemini理解、FFmpeg切割
+- 数据库字段：`startMs`, `endMs` (整数，毫秒单位)
+- UI 显示：`HH:MM:SS.mmm` 格式
+- **验收标准**: 音画同步误差 < 50ms
+
+### 双路径数据处理架构
+
+**路径 A：镜头检测（Shot Detection）** - 为深度解说模式提供素材
+```
+完整剧集 → 自动镜头检测 → N个镜头片段
+- 每个镜头：startMs, endMs, semanticLabel, thumbnailPath
+- 用途：模式B（解说）可以灵活拼接画面
+```
+
+**路径 B：Gemini 完整理解** - 理解完整故事线
+```
+完整剧集（45分钟）→ Gemini 3 观看完整视频 → 结构化数据
+{
+  storylines: [...],      // 10+ 条独立故事线
+  characters: {...},       // 人物关系图谱
+  keyMoments: [...],       // 关键时刻（毫秒级时间戳）
+  emotionalArc: [...],     // 情感曲线
+  highlights: [...]        // 高光候选列表
+}
+```
+
+### 两种模式使用不同素材
+
+**模式 A：高光切片（Highlight Hook）**
+- 素材来源：完整剧集文件 + Gemini 标记的毫秒级时间戳
+- 操作：FFmpeg 精确切割完整视频
+- 输出：单个连续的高光切片视频
+
+**模式 B：深度解说（Recap Matrix）**
+- 素材来源：预处理好的镜头片段库（毫秒级时间戳）
+- 操作：语义搜索匹配镜头 → 拼接多个小镜头
+- 输出：由多个镜头拼接的解说视频
+
+### 数据库设计要求
+
+**核心表结构**：
+```sql
+-- 1. projects 表（项目组织）
+projects:
+  - id, name, description, createdAt, updatedAt
+
+-- 2. videos 表（完整剧集）
+videos:
+  - projectId (关联到项目) ⚠️ 需要添加
+  - type: "full_episode" | "shot" | "clip" ⚠️ 需要添加
+  - filePath, durationMs (毫秒) ✅ 已有
+  - width, height, fps ✅ 已有
+  - status: "uploading" | "processing" | "analyzing" | "ready" ✅ 已有
+
+-- 3. shots 表（镜头片段）✅ 已有
+shots:
+  - videoId (关联到源视频) ✅ 已有
+  - startMs, endMs (毫秒) ✅ 已有
+  - semanticLabel (用于搜索) ⚠️ 需要明确用途
+  - thumbnailPath ⚠️ 需要添加
+
+-- 4. project_analysis 表（项目级Gemini理解）⚠️ 缺失
+project_analysis:
+  - projectId
+  - storylines (JSON - 10+条故事线)
+  - keyMoments (JSON - 毫秒级时间戳)
+  - characters (JSON - 人物关系)
+  - analyzedAt
+
+-- 5. highlights 表（高光候选）✅ 已有
+highlights:
+  - videoId, startMs, endMs (毫秒) ✅ 已有
+  - viralScore, category ✅ 已有
+
+-- 6. storylines, recap_tasks, recap_segments ✅ 已有
+```
+
+**⚠️ 数据库需要修改的地方**：
+1. 添加 `projects` 表（项目组织）
+2. `videos` 表添加 `projectId` 外键
+3. `videos` 表添加 `type` 字段区分完整剧集/镜头/切片
+4. 添加 `project_analysis` 表存储Gemini完整理解结果
+5. `shots` 表添加 `thumbnailPath` 和更明确的 `semanticLabel`
+
+### FFmpeg 必须使用毫秒级精确切割
+```bash
+# ✅ 正确（毫秒精度）
+ffmpeg -ss 00:12:34.567 -i input.mp4 -t 120.000 -c:v libx264 -preset fast -crf 18 output.mp4
+
+# ❌ 错误（只能跳到I帧，不精确）
+ffmpeg -ss 00:12:34 -i input.mp4 -t 120 -c:v copy output.mp4
+```
+
+---
+
 ## 下一步开发计划
 
 ### 阶段 2：模式 A - 高光智能切片

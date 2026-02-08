@@ -282,4 +282,4 @@ const subtitles = ElevenLabsClient.convertToRemotionSubtitles(
 ---
 
 **最后更新**: 2025-02-08
-**状态**: ✅ Gemini API 已配置成功 | ⚠️ ElevenLabs 待配置
+**状态**: ✅ Gemini API 已配置成功 | ✅ ElevenLabs API 已配置成功

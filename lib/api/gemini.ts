@@ -329,7 +329,7 @@ ${sampleFrames && sampleFrames.length > 0 ? `已提供 ${sampleFrames.length} �
     const response = await this.callApi(prompt, systemInstruction);
 
     if (!response.success || !response.data) {
-      return response;
+      return response as GeminiResponse<VideoAnalysis>;
     }
 
     // 解析 JSON 响应
@@ -385,7 +385,7 @@ ${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)} - ${th
     const response = await this.callApi(prompt, systemInstruction);
 
     if (!response.success || !response.data) {
-      return response;
+      return response as GeminiResponse<HighlightMoment[]>;
     }
 
     const parsed = this.parseJsonResponse<{ highlights: HighlightMoment[] }>(response.data as string);
@@ -435,7 +435,7 @@ ${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)}] ${s.d
     const response = await this.callApi(prompt, systemInstruction);
 
     if (!response.success || !response.data) {
-      return response;
+      return response as GeminiResponse<Storyline[]>;
     }
 
     const parsed = this.parseJsonResponse<{ storylines: Storyline[] }>(response.data as string);
@@ -494,7 +494,7 @@ ${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)}] ${s.d
     const response = await this.callApi(prompt, systemInstruction);
 
     if (!response.success || !response.data) {
-      return response;
+      return response as GeminiResponse<RecapScript[]>;
     }
 
     const parsed = this.parseJsonResponse<{ scripts: RecapScript[] }>(response.data as string);

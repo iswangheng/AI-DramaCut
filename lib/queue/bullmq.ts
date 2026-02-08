@@ -79,7 +79,6 @@ export class QueueManager {
     // 记录到数据库
     const job = await queue.add(jobType, data, {
       delay: options?.delay,
-      timeout: queueConfig.jobTimeouts[jobType as keyof typeof queueConfig.jobTimeouts] || 60000,
     });
 
     // 保存任务记录到数据库
