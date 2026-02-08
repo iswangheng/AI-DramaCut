@@ -10,7 +10,14 @@ import { wsConfig } from '../config';
 // 类型定义
 // ============================================
 
-export type WSMessageType = 'progress' | 'status' | 'error' | 'complete';
+export type WSMessageType =
+  | 'progress'
+  | 'status'
+  | 'error'
+  | 'complete'
+  | 'warning'
+  | 'success'
+  | 'batch_error';
 
 export interface WSMessage {
   type: WSMessageType;

@@ -231,6 +231,11 @@ export const queueJobs = sqliteTable('queue_jobs', {
     enum: ['waiting', 'active', 'completed', 'failed', 'delayed']
   }).notNull().default('waiting'),                          // 任务状态
 
+  // 进度和断点续传
+  progress: integer('progress').default(0),                // 任务进度（0-100）
+  checkpoint: text('checkpoint'),                          // 断点信息（JSON）
+  retryCount: integer('retry_count').default(0),           // 重试次数
+
   // 结果
   result: text('result'),                                  // 执行结果（JSON）
   error: text('error'),                                    // 错误信息
