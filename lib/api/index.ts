@@ -2,8 +2,9 @@
 // API 客户端统一导出
 // ============================================
 
-export { GeminiClient, geminiClient } from './gemini';
-export { ElevenLabsClient, elevenlabsClient } from './elevenlabs';
+// 只导出类，不导出单例（避免启动时初始化）
+export { GeminiClient } from './gemini';
+export { ElevenLabsClient } from './elevenlabs';
 export { projectsApi, videosApi } from './projects';
 
 // 导出类型
