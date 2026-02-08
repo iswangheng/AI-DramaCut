@@ -12,21 +12,34 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Upload, X, Film } from "lucide-react";
+import { Upload, X, Film, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { uploadVideos } from "@/lib/upload/video";
+import { projectsApi } from "@/lib/api";
 
 interface UploadVideoDialogProps {
-  onUpload?: (files: File[]) => void;
+  projectId?: number;
+  onUploadComplete?: () => void;
 }
 
-export function UploadVideoDialog({ onUpload }: UploadVideoDialogProps) {
+interface UploadResult {
+  file: File;
+  success: boolean;
+  data?: unknown;
+  message?: string;
+}
+
+export function UploadVideoDialog({ projectId, onUploadComplete }: UploadVideoDialogProps) {
   const [open, setOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [uploadResults, setUploadResults] = useState<UploadResult[]>([]);
+  const [creatingRecords, setCreatingRecords] = useState(false);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
       setUploadedFiles(acceptedFiles);
+      setUploadResults([]);
     }
   }, []);
 
@@ -41,22 +54,77 @@ export function UploadVideoDialog({ onUpload }: UploadVideoDialogProps) {
   const handleUpload = async () => {
     if (uploadedFiles.length === 0) return;
 
-    setUploading(true);
-
-    // 模拟上传进度
-    for (let i = 0; i <= 100; i += 10) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      setUploadProgress(i);
+    if (!projectId) {
+      alert("缺少项目 ID");
+      return;
     }
 
-    // 上传完成
-    onUpload?.(uploadedFiles);
-
-    // 重置状态
-    setUploadedFiles([]);
+    setUploading(true);
     setUploadProgress(0);
-    setUploading(false);
-    setOpen(false);
+    setUploadResults([]);
+
+    try {
+      // 步骤 1: 上传文件
+      const results = await uploadVideos(
+        uploadedFiles,
+        (current, total) => {
+          const progress = Math.round((current / total) * 50); // 上传占 50%
+          setUploadProgress(progress);
+        }
+      );
+
+      setUploadResults(results);
+
+      // 步骤 2: 为成功上传的文件创建数据库记录
+      const successResults = results.filter((r) => r.success);
+
+      if (successResults.length > 0) {
+        setCreatingRecords(true);
+
+        for (let i = 0; i < successResults.length; i++) {
+          const result = successResults[i];
+          if (result.data) {
+            try {
+              await projectsApi.uploadVideo(projectId, {
+                filename: result.data.filename,
+                filePath: result.data.filePath,
+                fileSize: result.data.fileSize,
+                durationMs: result.data.durationMs,
+                width: result.data.width,
+                height: result.data.height,
+                fps: result.data.fps,
+              });
+
+              // 更新进度（创建记录占 50%）
+              const progress = 50 + Math.round(((i + 1) / successResults.length) * 50);
+              setUploadProgress(progress);
+            } catch (error) {
+              console.error(`创建视频记录失败: ${result.file.name}`, error);
+              // 更新结果为失败
+              result.success = false;
+              result.message = error instanceof Error ? error.message : "创建记录失败";
+            }
+          }
+        }
+
+        setCreatingRecords(false);
+      }
+
+      // 延迟关闭对话框，让用户看到结果
+      setTimeout(() => {
+        setOpen(false);
+        setUploadedFiles([]);
+        setUploadProgress(0);
+        setUploadResults([]);
+        setUploading(false);
+        onUploadComplete?.();
+      }, 1500);
+    } catch (error) {
+      console.error("上传失败:", error);
+      alert(error instanceof Error ? error.message : "上传失败");
+      setUploading(false);
+      setCreatingRecords(false);
+    }
   };
 
   const handleRemoveFile = (index: number) => {
@@ -83,7 +151,7 @@ export function UploadVideoDialog({ onUpload }: UploadVideoDialogProps) {
         <DialogHeader>
           <DialogTitle>上传视频</DialogTitle>
           <DialogDescription>
-            支持 MP4、MOV、AVI、MKV、WebM 格式，单文件最大 5GB
+            支持 MP4、MOV、AVI、MKV、WebM 格式，单文件最大 2GB
           </DialogDescription>
         </DialogHeader>
 
@@ -99,6 +167,7 @@ export function UploadVideoDialog({ onUpload }: UploadVideoDialogProps) {
                   ? "border-primary bg-primary/10"
                   : "border-border hover:border-primary/50 hover:bg-muted/50"
               }
+              ${uploading ? "opacity-50 pointer-events-none" : ""}
             `}
           >
             <input {...getInputProps()} />
@@ -123,31 +192,43 @@ export function UploadVideoDialog({ onUpload }: UploadVideoDialogProps) {
               <p className="text-sm font-medium text-foreground">
                 已选择 {uploadedFiles.length} 个文件
               </p>
-              {uploadedFiles.map((file, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-3 p-3 bg-muted rounded-lg"
-                >
-                  <Film className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {file.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatFileSize(file.size)}
-                    </p>
+              {uploadedFiles.map((file, index) => {
+                const result = uploadResults[index];
+                return (
+                  <div
+                    key={index}
+                    className="flex items-center gap-3 p-3 bg-muted rounded-lg"
+                  >
+                    <Film className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {file.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatFileSize(file.size)}
+                      </p>
+                    </div>
+                    {result && (
+                      <div className="flex-shrink-0">
+                        {result.success ? (
+                          <CheckCircle className="w-5 h-5 text-green-600" />
+                        ) : (
+                          <XCircle className="w-5 h-5 text-red-600" />
+                        )}
+                      </div>
+                    )}
+                    {!uploading && !result && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveFile(index)}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
-                  {!uploading && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveFile(index)}
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -155,10 +236,28 @@ export function UploadVideoDialog({ onUpload }: UploadVideoDialogProps) {
           {uploading && (
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">上传中...</span>
+                <span className="text-muted-foreground">
+                  {creatingRecords ? "创建数据库记录..." : "上传中..."}
+                </span>
                 <span className="font-medium text-foreground">{uploadProgress}%</span>
               </div>
               <Progress value={uploadProgress} className="h-2" />
+              {creatingRecords && (
+                <p className="text-xs text-muted-foreground">
+                  正在创建视频记录，请稍候...
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* 上传结果 */}
+          {uploadResults.length > 0 && !uploading && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">上传结果</p>
+              <div className="p-3 bg-muted rounded-lg text-sm">
+                {uploadResults.filter((r) => r.success).length} 成功,
+                {uploadResults.filter((r) => !r.success).length} 失败
+              </div>
             </div>
           )}
         </div>
@@ -171,6 +270,7 @@ export function UploadVideoDialog({ onUpload }: UploadVideoDialogProps) {
               setOpen(false);
               setUploadedFiles([]);
               setUploadProgress(0);
+              setUploadResults([]);
             }}
             disabled={uploading}
           >
@@ -180,7 +280,14 @@ export function UploadVideoDialog({ onUpload }: UploadVideoDialogProps) {
             onClick={handleUpload}
             disabled={uploadedFiles.length === 0 || uploading}
           >
-            {uploading ? "上传中..." : "开始上传"}
+            {uploading ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {creatingRecords ? "保存中..." : "上传中..."}
+              </span>
+            ) : (
+              "开始上传"
+            )}
           </Button>
         </div>
       </DialogContent>
