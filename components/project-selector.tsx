@@ -94,7 +94,7 @@ export function ProjectSelector() {
 
       <DropdownMenuContent
         align="start"
-        className="w-[220px] max-h-[480px] overflow-y-auto"
+        className="w-[230px] max-h-[480px] overflow-y-auto"
       >
         {/* 当前项目信息 */}
         {currentProject && (

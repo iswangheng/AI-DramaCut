@@ -109,10 +109,69 @@ function RecapContent() {
   const [streamProgress, setStreamProgress] = useState(0);
   const [generatedTaskId, setGeneratedTaskId] = useState<number | null>(null);
 
+  // 步骤 5: 渲染相关状态
+  const [renderJobId, setRenderJobId] = useState<string | null>(null);
+  const [renderProgress, setRenderProgress] = useState(0);
+  const [renderMessage, setRenderMessage] = useState("");
+  const [outputPath, setOutputPath] = useState<string | null>(null);
+  const [ws, setWs] = useState<WebSocket | null>(null);
+
   // 加载项目列表
   useEffect(() => {
     loadProjects();
+
+    // 清理函数
+    return () => {
+      if (ws) {
+        ws.close();
+      }
+    };
   }, []);
+
+  // WebSocket 消息处理
+  useEffect(() => {
+    if (!renderJobId || !ws) return;
+
+    // 订阅任务进度
+    ws.send(JSON.stringify({
+      type: 'progress',
+      data: { jobId: renderJobId }
+    }));
+
+    // 监听消息
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const message = JSON.parse(event.data);
+
+        switch (message.type) {
+          case 'progress':
+            setRenderProgress(message.data.progress || 0);
+            setRenderMessage(message.data.message || '');
+            break;
+
+          case 'complete':
+            setRenderProgress(100);
+            setRenderMessage('渲染完成！');
+            setOutputPath(message.data.outputPath || null);
+            setCurrentStep(5); // 跳转到完成页面
+            break;
+
+          case 'error':
+            setError(message.data.error || '渲染失败');
+            setIsGenerating(false);
+            break;
+        }
+      } catch (error) {
+        console.error('WebSocket 消息解析错误:', error);
+      }
+    };
+
+    ws.addEventListener('message', handleMessage);
+
+    return () => {
+      ws.removeEventListener('message', handleMessage);
+    };
+  }, [renderJobId, ws]);
 
   // 动态导入 API 客户端（避免初始化错误）
   const loadProjects = async () => {
@@ -245,23 +304,73 @@ function RecapContent() {
     }
   };
 
-  // 步骤 5: 生成语音
+  // 步骤 4: 生成语音并开始渲染
   const handleGenerateVoice = async () => {
-    setIsGenerating(true);
-    try {
-      // TODO: 调用 TTS API
-      // const response = await fetch('/api/elevenlabs/generate-narration', {
-      //   method: 'POST',
-      //   body: JSON.stringify({ text: generatedNarration })
-      // });
+    if (!generatedTaskId) {
+      setError('缺少任务 ID，请重新生成文案');
+      return;
+    }
 
-      // 模拟生成
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-      setCurrentStep(5);
+    setIsGenerating(true);
+    setError(null);
+    setRenderProgress(0);
+    setRenderMessage('正在生成语音...');
+    setCurrentStep(4); // 跳转到渲染进度页面
+
+    try {
+      // 1. 调用 TTS API 生成语音
+      const ttsResponse = await fetch('/api/recap/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: generatedTaskId }),
+      });
+
+      const ttsResult = await ttsResponse.json();
+
+      if (!ttsResult.success) {
+        throw new Error(ttsResult.message || '生成语音失败');
+      }
+
+      setRenderMessage('语音生成完成，正在准备渲染...');
+
+      // 2. 连接 WebSocket
+      const wsUrl = `ws://localhost:3001`; // WebSocket 服务器地址
+      const websocket = new WebSocket(wsUrl);
+
+      websocket.onopen = () => {
+        console.log('WebSocket 已连接');
+        setWs(websocket);
+      };
+
+      websocket.onerror = (error) => {
+        console.error('WebSocket 连接错误:', error);
+        setError('WebSocket 连接失败，将无法显示实时进度');
+      };
+
+      // 3. 调用渲染 API
+      const renderResponse = await fetch('/api/recap/render-job', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: generatedTaskId }),
+      });
+
+      const renderResult = await renderResponse.json();
+
+      if (!renderResult.success) {
+        throw new Error(renderResult.message || '创建渲染任务失败');
+      }
+
+      // 4. 保存渲染任务 ID，WebSocket 会监听进度
+      setRenderJobId(renderResult.data.jobId);
+      setRenderMessage('任务已创建，开始渲染...');
+
       setIsGenerating(false);
     } catch (error) {
-      console.error("生成语音失败:", error);
+      const errorMsg = error instanceof Error ? error.message : '生成语音失败';
+      setError(errorMsg);
+      console.error('生成语音失败:', error);
       setIsGenerating(false);
+      setCurrentStep(3); // 返回上一步
     }
   };
 
@@ -498,10 +607,72 @@ function RecapContent() {
           <div className="space-y-6">
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto mb-6"></div>
-              <h2 className="text-xl font-semibold mb-2">正在生成语音...</h2>
-              <p className="text-muted-foreground">
-                AI 正在将解说文案转换为自然流畅的语音
+              <h2 className="text-xl font-semibold mb-2">正在渲染视频...</h2>
+              <p className="text-muted-foreground mb-8">
+                AI 正在匹配画面并渲染最终视频
               </p>
+
+              {/* 渲染进度 */}
+              <div className="max-w-md mx-auto space-y-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">渲染进度</span>
+                  <span className="font-semibold">{renderProgress.toFixed(0)}%</span>
+                </div>
+                <Progress value={renderProgress} />
+
+                {/* 当前状态消息 */}
+                {renderMessage && (
+                  <div className="bg-muted/50 rounded-lg p-4">
+                    <p className="text-sm text-muted-foreground">{renderMessage}</p>
+                  </div>
+                )}
+
+                {/* 步骤说明 */}
+                <div className="text-left bg-card rounded-lg p-4 space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${renderProgress >= 10 ? 'bg-green-500' : 'bg-muted'}`} />
+                    <span className={renderProgress >= 10 ? 'text-foreground' : 'text-muted-foreground'}>
+                      1. 加载文案段落
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${renderProgress >= 30 ? 'bg-green-500' : 'bg-muted'}`} />
+                    <span className={renderProgress >= 30 ? 'text-foreground' : 'text-muted-foreground'}>
+                      2. 语义匹配画面
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${renderProgress >= 40 ? 'bg-green-500' : 'bg-muted'}`} />
+                    <span className={renderProgress >= 40 ? 'text-foreground' : 'text-muted-foreground'}>
+                      3. Remotion 视频渲染
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${renderProgress >= 95 ? 'bg-green-500' : 'bg-muted'}`} />
+                    <span className={renderProgress >= 95 ? 'text-foreground' : 'text-muted-foreground'}>
+                      4. 保存输出文件
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 错误提示 */}
+              {error && (
+                <div className="max-w-md mx-auto mt-6 bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+                  <p className="text-sm text-destructive">{error}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-4"
+                    onClick={() => {
+                      setError(null);
+                      setCurrentStep(3);
+                    }}
+                  >
+                    返回重试
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         );
@@ -516,9 +687,22 @@ function RecapContent() {
                 你的深度解说视频已经准备就绪
               </p>
 
-              <Card className="max-w-md mx-auto">
+              <Card className="max-w-2xl mx-auto">
                 <CardContent className="pt-6">
-                  <div className="space-y-4">
+                  {/* 视频预览 */}
+                  {outputPath && (
+                    <div className="mb-6">
+                      <video
+                        src={outputPath}
+                        controls
+                        className="w-full rounded-lg"
+                        style={{ maxHeight: '400px' }}
+                      />
+                    </div>
+                  )}
+
+                  {/* 视频信息 */}
+                  <div className="space-y-4 mb-6">
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">故事线</span>
                       <span className="font-semibold">{selectedStoryline?.name}</span>
@@ -530,25 +714,66 @@ function RecapContent() {
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">时长</span>
-                      <span className="font-semibold">~90 秒</span>
+                      <span className="text-muted-foreground">输出路径</span>
+                      <span className="font-mono text-xs">{outputPath || '未知'}</span>
                     </div>
                   </div>
 
-                  <div className="mt-6 flex gap-4">
+                  {/* 操作按钮 */}
+                  <div className="space-y-3">
                     <Button
-                      variant="outline"
-                      className="flex-1"
+                      className="w-full"
+                      size="lg"
                       onClick={() => {
-                        setCurrentStep(0);
-                        setStorylines([]);
-                        setSelectedStoryline(null);
-                        setGeneratedNarration("");
+                        if (outputPath) {
+                          // 下载视频
+                          const link = document.createElement('a');
+                          link.href = outputPath;
+                          link.download = `recap_${generatedTaskId}_${Date.now()}.mp4`;
+                          link.click();
+                        }
                       }}
                     >
-                      重新开始
+                      下载视频
                     </Button>
-                    <Button className="flex-1">下载视频</Button>
+
+                    <div className="flex gap-3">
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => {
+                          setCurrentStep(3);
+                          setRenderProgress(0);
+                          setRenderMessage('');
+                          setOutputPath(null);
+                        }}
+                      >
+                        重新渲染
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => {
+                          setCurrentStep(0);
+                          setStorylines([]);
+                          setSelectedStoryline(null);
+                          setGeneratedNarration('');
+                          setRenderProgress(0);
+                          setRenderMessage('');
+                          setOutputPath(null);
+                          setGeneratedTaskId(null);
+                        }}
+                      >
+                        创建新任务
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* 使用提示 */}
+                  <div className="mt-6 p-4 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      💡 <strong>提示：</strong>视频已保存到 public/outputs/recap/ 目录，你可以随时下载或分享。
+                    </p>
                   </div>
                 </CardContent>
               </Card>
