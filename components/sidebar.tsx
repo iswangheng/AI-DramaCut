@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { ChevronDown, FolderOpen, Scissors, Mic, ListTodo, Settings } from "lucide-react";
+import { FolderOpen, Scissors, Mic, ListTodo, Settings } from "lucide-react";
+import { ProjectSelector } from "./project-selector";
 
 interface NavItem {
   id: string;
@@ -18,11 +19,7 @@ const navItems: NavItem[] = [
   { id: "tasks", label: "任务管理", icon: <ListTodo className="w-5 h-5" />, section: "system", path: "/tasks" },
 ];
 
-interface SidebarProps {
-  currentProject?: string;
-}
-
-export function Sidebar({ currentProject = "霸道总裁爱上我 第3集" }: SidebarProps) {
+export function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -52,15 +49,7 @@ export function Sidebar({ currentProject = "霸道总裁爱上我 第3集" }: Si
       </div>
 
       {/* 项目切换器 */}
-      <div className="mx-4 mt-4 p-2.5 bg-muted/50 border border-border rounded-xl cursor-pointer transition-base hover:bg-muted hover:border-border/80">
-        <div className="flex items-center justify-between text-xs font-medium text-muted-foreground mb-1.5">
-          <span>当前项目</span>
-        </div>
-        <div className="flex items-center justify-between font-semibold text-foreground/80">
-          <span className="text-sm truncate flex-1">{currentProject}</span>
-          <ChevronDown className="w-4 h-4 ml-1 flex-shrink-0" />
-        </div>
-      </div>
+      <ProjectSelector />
 
       {/* 导航菜单 */}
       <nav className="flex-1 px-2 py-3 overflow-y-auto">
@@ -73,9 +62,9 @@ export function Sidebar({ currentProject = "霸道总裁爱上我 第3集" }: Si
             <div
               key={item.id}
               onClick={() => handleNavClick(item)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-base mb-0.5 ${
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all mb-0.5 ${
                 activeItem === item.id
-                  ? "bg-primary/10 text-primary-foreground"
+                  ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
               }`}
             >
@@ -93,9 +82,9 @@ export function Sidebar({ currentProject = "霸道总裁爱上我 第3集" }: Si
             <div
               key={item.id}
               onClick={() => handleNavClick(item)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-base mb-0.5 ${
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all mb-0.5 ${
                 activeItem === item.id
-                  ? "bg-primary/10 text-primary-foreground"
+                  ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
               }`}
             >
@@ -107,7 +96,7 @@ export function Sidebar({ currentProject = "霸道总裁爱上我 第3集" }: Si
 
       {/* 底部设置 */}
       <div className="p-3 border-t border-border/50">
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-base text-muted-foreground hover:bg-muted/50 hover:text-foreground">
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all text-muted-foreground hover:bg-muted/50 hover:text-foreground">
           <Settings className="w-5 h-5" />
           <span className="text-sm font-medium">设置</span>
         </div>

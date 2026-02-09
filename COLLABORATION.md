@@ -1,608 +1,462 @@
-# DramaGen AI - 多 Agent 协作指南
+# DramaGen AI - 双 Agent 协作方案
 
-本文档用于多个 Claude Code 实例并行开发 DramaGen AI 项目。
-
-**最后更新**: 2025-02-08
-**协作用户**: @wangheng
-**并行 Agent 数量**: 4
+**更新时间**: 2025-02-09
+**并行 Agent 数量**: 2
+**协作模式**: 按功能模块独立开发（前后端一体化）
 
 ---
 
-## 📊 当前 Agent 分工
+## 📊 分工原则
 
-### Agent 1 - UI 界面开发 🎨
-**职责**：用户界面和交互体验
-**工作目录**:
-```
-app/                    # Next.js 页面
-├── projects/           # ✅ 已创建项目页面
-├── mode-a/             # 高光切片模式
-└── mode-b/             # 深度解说模式
+### ✅ 核心理念
+- **按功能模块分工** - 每个 Agent 负责完整的独立功能
+- **前后端一体化** - 一个功能从 UI 到 API 全部由一个人完成
+- **独立交付** - 每个功能都可以独立测试和上线
 
-components/ui/          # 通用 UI 组件
-components/layout/      # 布局组件
-```
+### 🎯 为什么这样分工？
 
-**当前任务**:
-- ✅ 创建主布局组件 (MainLayout)
-- ✅ 创建项目管理页面 (/projects)
-- ✅ 深度解说模式 UI (/recap)
-- 📋 待办：高光切片模式 UI
-- 📋 待办：视频上传界面
-- 📋 待办：毫秒级调整 UI
+**优点**：
+1. ✅ **减少沟通成本** - 不需要前后端联调
+2. ✅ **责任清晰** - 一个功能一个人负责到底
+3. ✅ **并行效率高** - 真正的独立开发，零冲突
+4. ✅ **交付更快** - 每个功能独立完成，不互相阻塞
 
-**技术栈**:
-- Radix UI (已安装)
-- Tailwind CSS (已配置)
-- Framer Motion (已安装)
-- Lucide React Icons (已安装)
-
-**负责人**: UI Agent 窗口
+**vs 前后端分离**：
+- ❌ 前后端分离需要频繁联调
+- ❌ 接口变更互相影响
+- ✅ 按功能分工更敏捷
 
 ---
 
-### Agent 2 - API 集成 🔌
-**职责**：第三方 AI 服务集成
-**工作目录**:
+## 👥 双 Agent 分工方案
+
+### **Agent 1（我）- 素材管理 + 高光切片 + 任务管理** 🎨
+
+**负责范围**：3 个完整的功能模块
+
+#### 模块 1：项目管理与素材管理（首页）📁
+
+**优先级**: 🔥 最高（用户入口）
+
+**页面路由**: `/` 和 `/projects`
+
+**前端页面**:
 ```
-lib/api/
-├── gemini.ts           # Gemini 3 API
-├── elevenlabs.ts       # ElevenLabs TTS
-├── yunwu.ts            # Yunwu.ai 代理
-└── types.ts            # API 类型定义
-```
+app/                      # 页面
+├── page.tsx             # 首页（项目列表）
+├── layout.tsx           # 布局（包含导航栏）
+└── projects/
+    ├── page.tsx         # 项目列表页
+    └── [id]/
+        └── page.tsx     # 项目详情页
 
-**已完成**:
-- ✅ Gemini 3 API 封装 (analyzeVideo, findHighlights, extractStorylines)
-- ✅ ElevenLabs TTS 集成 (textToSpeech, generateNarration)
-- ✅ ViralMoment 接口修复（符合 types/api-contracts.ts）
-- ✅ TTSResult 接口增强（audioPath, durationMs, wordTimings）
-- ✅ HTTP API 路由:
-  - /api/gemini/detect-viral-moments
-  - /api/gemini/extract-storylines (新增)
-  - /api/gemini/generate-narration (新增)
-  - /api/elevenlabs/generate-narration
-
-**当前任务**:
-- ✅ 错误重试机制（已完成）
-- ✅ wordTimings 精确提取（已完成）
-- ✅ 流式响应处理（已完成）
-- 📋 待办：API 性能优化（缓存、批量处理）
-
-**依赖配置**:
-```bash
-# 环境变量（.env）
-GEMINI_API_KEY=
-GEMINI_MODEL=gemini-2.5-flash-exp
-YUNWU_API_ENDPOINT=https://yunwu.ai/api/v1
-ELEVENLABS_API_KEY=
+components/
+├── main-layout.tsx      # 主布局（导航栏 + 项目选择器）
+├── project-selector/   # 项目选择器组件
+│   ├── selector.tsx    # 下拉选择器
+│   └── switcher.tsx    # 项目切换按钮
+├── create-project-dialog.tsx  # 创建项目弹窗
+└── edit-project-dialog.tsx   # 编辑项目弹窗
 ```
 
-**负责人**: API Agent 窗口
+**后端 API**:
+```
+app/api/
+├── projects/
+│   ├── route.ts              # GET（列表）+ POST（创建）
+│   ├── [id]/
+│   │   ├── route.ts          # GET/PUT/DELETE 项目
+│   │   └── videos/
+│   │       └── route.ts      # 视频管理
+├── upload/
+│   └── route.ts              # 视频上传
+└── videos/
+    └── [id]/
+        └── route.ts          # 视频删除
+```
+
+**核心功能**:
+1. **项目选择器**（左上角导航栏）
+   - 下拉菜单显示所有项目
+   - 快速切换项目
+   - 显示当前项目名称
+
+2. **项目列表**
+   - 创建项目（名称 + 描述）
+   - 编辑项目信息
+   - 删除项目（级联删除所有视频）
+   - 搜索项目
+
+3. **项目详情**
+   - 显示项目信息
+   - 视频列表展示
+   - 上传视频按钮
+   - 视频元数据显示
+
+4. **视频上传**
+   - 支持多文件上传
+   - 实时进度条
+   - 上传后自动触发处理
+
+**数据表**:
+- ✅ `projects` 表
+- ✅ `videos` 表
+
+**预计工时**: 1-2 天（UI 已完成，需优化）
 
 ---
 
-### Agent 3 - 视频处理核心 🎬
-**职责**：FFmpeg 工具和 Remotion 渲染
-**工作目录**:
+#### 模块 2：高光切片模式 ✂️
+
+**优先级**: 🔥 高（核心功能）
+
+**页面路由**: `/highlight`
+
+**前端页面**:
 ```
-lib/ffmpeg/             # ✅ FFmpeg 工具库
-lib/video/              # 视频处理高级封装
-components/remotion/    # ✅ Remotion 组件
+app/highlight/
+├── page.tsx                      # 高光切片主页
+└── components/                   # 高光切片组件
+    ├── highlight-player.tsx      # 视频预览播放器
+    ├── highlight-controls.tsx    # 毫秒级微调控件
+    ├── highlight-list.tsx         # 高光候选列表
+    ├── render-button.tsx          # 渲染按钮
+    └── progress-bar.tsx           # 渲染进度条
+
+components/highlight/             # 抽离到独立目录
 ```
 
-**已完成**:
-- ✅ trimVideo() - 毫秒级裁剪
-- ✅ extractAudio() - 音频提取
-- ✅ mixAudio() - 多轨道混音
-- ✅ CaptionedVideo 组件
-- ✅ KaraokeSentence 组件
+**后端 API**:
+```
+app/api/highlights/
+├── route.ts                      # GET（列表）+ POST（生成）
+├── generate/
+│   └── route.ts                  # 触发 AI 检测
+├── [id]/
+│   ├── adjust/
+│   │   └── route.ts              # 调整切点
+│   ├── confirm/
+│   │   └── route.ts              # 确认高光
+│   └── render/
+│       └── route.ts              # 渲染视频
+└── batch-render/
+    └── route.ts                  # 批量渲染
+```
 
-**当前任务**:
-- 📋 待办：视频元数据提取
-- 📋 待办：镜头检测 (Shot Detection)
-- 📋 待办：视频预处理管线
+**核心功能**:
+1. **视频预览播放器**
+   - 集成 react-player
+   - 显示当前时间（毫秒级精度：HH:MM:SS.mmm）
+   - 高光时刻标记点（在进度条上显示）
+   - 点击标记点跳转到对应时间
+   - 预览切点变化
 
-**负责人**: Video Agent 窗口（本窗口）
+2. **毫秒级微调控件**
+   - 快捷按钮：-1000ms | -500ms | -100ms
+   - 快捷按钮：+100ms | +500ms | +1000ms
+   - 数字输入框（手动输入毫秒数）
+   - 实时预览切点变化
+
+3. **高光列表**
+   - 显示 AI 检测到的高光候选
+   - 显示高光分数（viralScore）
+   - 显示高光类别（category）
+   - 选择要渲染的高光片段
+
+4. **渲染功能**
+   - 单个渲染按钮
+   - 批量渲染按钮
+   - 实时进度条（WebSocket）
+   - 渲染完成后预览视频
+
+**数据表**:
+- ✅ `highlights` 表
+- ✅ `videos` 表（关联）
+
+**预计工时**: 3-5 天
 
 ---
 
-### Agent 4 - 数据层与任务队列 💾
-**职责**：数据库、队列、实时通信
-**工作目录**:
-```
-lib/db/                 # SQLite + Drizzle
-lib/queue/              # BullMQ 任务队列
-lib/websocket/          # WebSocket 服务
-```
+#### 模块 3：任务管理 📋
 
-**当前任务**:
-- 📋 待创建：数据库 Schema 设计
-- 📋 待创建：任务队列系统
-- 📋 待创建：实时进度推送
+**优先级**: 🟡 中（辅助功能）
 
-**依赖配置**:
-```bash
-# 环境变量（.env）
-DATABASE_URL=./data/database.sqlite
-REDIS_HOST=localhost
-REDIS_PORT=6379
-WS_PORT=3001
+**页面路由**: `/tasks`
+
+**前端页面**:
+```
+app/tasks/
+└── page.tsx                     # 任务管理主页
+
+components/tasks/
+├── task-list.tsx                # 任务列表
+├── task-card.tsx                # 任务卡片
+├── task-detail.tsx              # 任务详情
+└── task-filters.tsx             # 任务筛选器
 ```
 
-**负责人**: Data Agent 窗口
+**后端 API**:
+```
+app/api/tasks/
+├── route.ts                     # GET（列表）
+├── [id]/
+│   ├── route.ts                 # GET（详情）
+│   ├── logs/
+│   │   └── route.ts             # 获取任务日志
+│   └── cancel/
+│       └── route.ts             # 取消任务
+```
+
+**核心功能**:
+1. **任务列表**
+   - 显示所有任务（队列中、进行中、已完成、失败）
+   - 任务状态徽章
+   - 任务进度条
+   - 按状态筛选
+
+2. **任务详情**
+   - 完整的任务信息
+   - 任务参数
+   - 实时进度
+   - 任务日志
+
+3. **任务操作**
+   - 取消任务
+   - 重试失败任务
+   - 删除任务记录
+
+**数据表**:
+- ✅ `queue_jobs` 表
+
+**预计工时**: 2-3 天
 
 ---
 
-## 🔄 自动同步设置
+### **Agent 2 - 深度解说模式** 🎙️
 
-### 方案 1：使用 watch 命令（推荐）
+**负责范围**：1 个完整的功能模块
 
-在每个 Agent 窗口运行以下命令：
+#### 模块：深度解说模式 🎙️
 
-```bash
-# 在 macOS/Linux 上
-brew install watch  # macOS 需要先安装
+**优先级**: 🔥 高（核心功能）
 
-# 每 5 分钟自动 pull
-watch -n 300 'git pull origin main'
+**页面路由**: `/recap`
 
-# 每 2 分钟自动 pull（更频繁）
-watch -n 120 'git pull origin main'
+**前端页面**:
+```
+app/recap/
+└── page.tsx                      # 深度解说主页
 
-# 后台运行（不占用终端）
-nohup watch -n 300 'git pull origin main' > /tmp/git-sync.log 2>&1 &
+components/recap/
+├── storylines-list.tsx          # 故事线列表
+├── script-editor.tsx             # 解说文案编辑器
+├── voice-selector.tsx           # 语音选择器
+├── segment-timeline.tsx          # 片段时间轴
+├── scene-matcher.tsx             # 画面匹配器
+├── preview-player.tsx            # 预览播放器
+└── render-button.tsx             # 渲染按钮
 ```
 
-### 方案 2：使用 Git Hook（自动提交前 pull）
-
-创建 `.git/hooks/pre-commit`:
-```bash
-#!/bin/bash
-echo "🔄 拉取最新代码..."
-git pull origin main
+**后端 API**:
+```
+app/api/recap/
+├── storylines/
+│   └── route.ts                  # 提取故事线
+├── scripts/
+│   └── route.ts                  # 生成解说文案
+├── tts/
+│   └── route.ts                  # TTS 音频合成
+├── match-scenes/
+│   └── route.ts                  # 画面匹配（核心算法）
+└── render/
+    └── route.ts                  # Remotion 渲染
 ```
 
-设置权限：
-```bash
-chmod +x .git/hooks/pre-commit
+**核心算法**（重点）:
+```
+lib/semantic/                     # 语义匹配库
+├── vectorizer.ts                 # 向量化
+│   ├── textEmbedding()          # 文本 → embedding
+│   └── shotEmbedding()          # 画面标签 → embedding
+├── similarity.ts                 # 相似度计算
+│   ├── cosineSimilarity()       # 余弦相似度
+│   └── topKMatches()            # Top-K 检索
+└── matcher.ts                    # 画面匹配器
+    ├── matchScenes()            # 主匹配函数
+    ├── ensureContinuity()       # 保证时间连续性
+    └── fallbackStrategy()       # 无匹配回退
+
+lib/recap/
+├── scene-selector.ts             # 场景选择器
+├── timeline-builder.ts           # 时间轴构建器
+└── remotion-generator.ts         # Remotion composition 生成器
 ```
 
-### 方案 3：使用 Node.js 脚本（跨平台）
+**核心功能**:
+1. **故事线提取**
+   - 从视频提取多条故事线
+   - 显示故事线列表
+   - 选择要解说的故事线
 
-创建 `scripts/sync.js`:
-```javascript
-const { execSync } = require('child_process');
+2. **解说文案生成**
+   - 选择解说风格（悬念/吐槽/共鸣）
+   - AI 生成解说文案
+   - 编辑优化文案
 
-console.log('🔄 自动同步中...');
+3. **TTS 音频合成**
+   - 选择语音（ElevenLabs）
+   - 生成音频
+   - 获取 word-level timings
 
-try {
-  execSync('git pull origin main', {
-    stdio: 'inherit'
-  });
-  console.log('✅ 同步完成');
-} catch (error) {
-  console.error('❌ 同步失败:', error.message);
-}
-```
+4. **画面自动匹配**（核心算法）
+   - 文本向量化（解说词 → embedding）
+   - 画面向量化（镜头标签 → embedding）
+   - 相似度计算
+   - Top-K 候选画面检索
+   - 时间连续性保证
 
-在 package.json 添加：
-```json
-{
-  "scripts": {
-    "sync": "node scripts/sync.js"
-  }
-}
-```
+5. **Remotion 渲染**
+   - 生成 composition
+   - 音画同步
+   - 字幕叠加（word-level）
+   - 渲染输出视频
 
-设置定时任务（推荐）：
-```bash
-# 每 3 分钟执行一次
-*/3 * * * * cd /path/to/AI-DramaCut && npm run sync
-```
+**数据表**:
+- ✅ `storylines` 表
+- ✅ `recap_tasks` 表
+- ✅ `recap_segments` 表
+- ✅ `shots` 表（关联）
+
+**预计工时**: 5-7 天（算法开发复杂）
 
 ---
 
-## 📋 接口契约（Interface Contracts）
+## 🔄 协作流程
 
-所有 Agent 必须遵守的接口约定。
+### 工作模式
+1. **独立开发** - 各自负责完整功能模块
+2. **零冲突** - 工作在不同页面和 API
+3. **共享资源** - 共用数据库和组件库
+4. **每日同步** - 更新 `docs/PROGRESS.md`
 
-### 视频 API（Agent 3 提供）
+### 文件分离
+```
+Agent 1 文件（不触碰）:
+├── app/page.tsx                          # 首页
+├── app/projects/                         # 项目管理
+├── app/highlight/                        # 高光切片
+├── app/tasks/                            # 任务管理
+├── app/api/projects/                     # 项目 API
+├── app/api/upload/                       # 上传 API
+├── app/api/videos/                       # 视频 API
+├── app/api/highlights/                   # 高光 API
+├── app/api/tasks/                        # 任务 API
+└── components/main-layout.tsx            # 导航栏
 
-```typescript
-// lib/video/metadata.ts
-export interface VideoMetadata {
-  duration: number;        // 时长（秒）
-  width: number;           // 宽度
-  height: number;          // 高度
-  fps: number;             // 帧率
-  bitrate: number;         // 比特率
-  codec: string;           // 编码格式
-}
+Agent 2 文件（不触碰）:
+├── app/recap/                            # 深度解说页面
+├── app/api/recap/                        # 解说 API
+├── lib/semantic/                         # 语义匹配库
+└── components/recap/                     # 解说组件
 
-export async function getVideoMetadata(videoPath: string): Promise<VideoMetadata>
-
-// lib/video/shot-detection.ts
-export interface SceneShot {
-  startMs: number;
-  endMs: number;
-  thumbnail: Buffer;       // 缩略图
-  semanticTags: string[];  // AI 生成的标签
-}
-
-export async function detectShots(videoPath: string): Promise<SceneShot[]>
+共享文件（都可以读，谨慎写）:
+├── components/ui/                        # 通用 UI 组件
+├── lib/db/                               # 数据库
+├── lib/queue/                            # 任务队列
+└── docs/PROGRESS.md                      # 进度文档（追加更新）
 ```
 
-### AI API（Agent 2 提供）
-
-```typescript
-// lib/api/gemini.ts
-export interface ViralMoment {
-  timestampMs: number;
-  type: "plot_twist" | "reveal" | "conflict" | "emotional";
-  confidence: number;
-  description: string;
-}
-
-export interface Storyline {
-  id: string;
-  title: string;
-  summary: string;
-  keyMoments: number[];    // 时间戳数组
-}
-
-export async function detectViralMoments(videoPath: string): Promise<ViralMoment[]>
-export async function extractStorylines(videoPath: string): Promise<Storyline[]>
-
-// lib/api/elevenlabs.ts
-export interface TTSResult {
-  audioPath: string;       // 生成的音频文件路径
-  durationMs: number;
-  wordTimings: Array<{     // 单词级时间戳
-    word: string;
-    startMs: number;
-    endMs: number;
-  }>;
-}
-
-export async function generateNarration(
-  text: string,
-  voice?: string
-): Promise<TTSResult>
+### 数据库表分离
 ```
+Agent 1:
+├── projects          # 项目管理
+├── videos            # 视频管理
+├── highlights        # 高光切片
+└── queue_jobs        # 任务队列（只读状态）
 
-### 数据库 API（Agent 4 提供）
-
-```typescript
-// lib/db/schema.ts
-export interface Project {
-  id: string;
-  name: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface VideoAsset {
-  id: string;
-  projectId: string;
-  path: string;
-  metadata: VideoMetadata;
-  processedAt?: Date;
-}
-
-export interface ProcessedClip {
-  id: string;
-  projectId: string;
-  startMs: number;
-  endMs: number;
-  type: "highlight" | "recap";
-  outputPath: string;
-}
-
-// lib/db/queries.ts
-export async function createProject(name: string): Promise<Project>
-export async function addVideoAsset(projectId: string, path: string): Promise<VideoAsset>
-export async function saveProcessedClip(clip: ProcessedClip): Promise<void>
-export async function getProject(projectId: string): Promise<Project>
-```
-
-### 任务队列 API（Agent 4 提供）
-
-```typescript
-// lib/queue/types.ts
-export interface VideoProcessingJob {
-  id: string;
-  type: "trim" | "analyze" | "render";
-  inputPath: string;
-  outputPath: string;
-  options: Record<string, any>;
-  status: "pending" | "processing" | "completed" | "failed";
-  progress: number;         // 0-100
-}
-
-// lib/queue/client.ts
-export async function submitJob(job: Omit<VideoProcessingJob, 'id' | 'status' | 'progress'>): Promise<string>
-export async function getJobStatus(jobId: string): Promise<VideoProcessingJob>
-```
-
----
-
-## ⚠️ 协作规则
-
-### 1. 文件所有权规则
-
-| 文件/目录 | 负责人 | 其他 Agent 规则 |
-|-----------|--------|----------------|
-| `app/` | Agent UI | 其他 Agent 只读 |
-| `components/ui/` | Agent UI | 其他 Agent 只读 |
-| `lib/api/` | Agent API | 其他 Agent 只读 |
-| `lib/ffmpeg/` | Agent Video | 其他 Agent 只读 |
-| `lib/video/` | Agent Video | 其他 Agent 只读 |
-| `lib/db/` | Agent Data | 其他 Agent 只读 |
-| `lib/queue/` | Agent Data | 其他 Agent 只读 |
-| `types/` | 共享 | ✅ 所有 Agent 可编辑 |
-| `package.json` | Agent API | ⚠️ 需要新依赖时通知 API Agent |
-| `.env` | 共享 | ✅ 所有 Agent 可编辑 |
-
-### 2. 提交消息规范
-
-每个 Agent 提交时必须遵循以下格式：
-
-```bash
-# 格式
-git commit -m "<type>(<scope>): <subject>
-
-<详细说明>
-
----
-Agent: <Agent 名称>
-依赖: <依赖的其他 Agent>
-阻塞: <阻塞其他 Agent 的任务>
-"
-
-# 示例
-git commit -m "feat(ui): 添加视频上传组件
-
-- 创建 VideoUploader 组件
-- 支持拖拽上传和进度显示
-- 添加文件格式验证
-
----
-Agent: Agent UI
-依赖: Agent Video (uploadVideo 函数)
-阻塞: 无
-"
-```
-
-### 3. 冲突解决流程
-
-当发生 Git 冲突时：
-
-```bash
-# 1. 先 pull
-git pull origin main
-
-# 2. 如果有冲突，查看冲突文件
-git status
-
-# 3. 联系其他 Agent 确认
-# 在本文档的"冲突日志"部分记录
-
-# 4. 手动解决冲突后
-git add .
-git commit -m "chore: 解决 <Agent A> 和 <Agent B> 的冲突"
+Agent 2:
+├── storylines        # 故事线
+├── recap_tasks       # 解说任务
+├── recap_segments    # 解说片段
+└── shots             # 镜头（只读，用于匹配）
 ```
 
 ---
 
-## 📝 协作日志
+## 📅 时间线
 
-### 2025-02-08
+### Week 1: 核心开发
 
-**17:00** - 项目启动
-- 创建协作文档
-- 定义 4 个 Agent 分工
-- Agent UI 已完成 MainLayout 和项目页面
-- Agent Video 已完成 FFmpeg 工具库
+**Day 1-2**:
+- **Agent 1**: 优化项目选择器 + 项目管理页面
+- **Agent 2**: 故事线提取 + 解说文案生成
 
-**17:30** - 接口定义
-- 定义所有 API 接口契约
-- 设置自动同步机制
+**Day 3-5**:
+- **Agent 1**: 高光切片播放器 + 微调控件
+- **Agent 2**: 语义向量化算法 + 相似度计算
 
-**18:00** - Agent 3 (Video) 完成 getMetadata()
-- 实现视频元数据提取功能
-- 创建 HTTP API: `/api/video/metadata`
-- 符合 `types/api-contracts.ts` 接口契约
-- Agent UI 现在可以调用此 API 获取视频信息
+**Day 6-7**:
+- **Agent 1**: 高光渲染功能 + 任务管理
+- **Agent 2**: 画面匹配算法 + Remotion 集成
 
-**18:15** - 发现阻塞项
-- Agent 3 发现 `shots` 表缺少 `thumbnailPath` 字段
-- 影响：`detectShots()` 功能无法完整实现
-- 需要 Agent 4 立即处理（详见"当前阻塞项"部分）
+### Week 2: 完善和测试
 
-**19:15** - Agent 2 完成接口契约修复
-- ✅ 修复 ViralMoment 接口，添加 suggestedStartMs, suggestedEndMs, confidence 字段
-- ✅ 增强 TTSResult 接口，添加 audioPath, durationMs, wordTimings, format 字段
-- ✅ 实现 detectViralMoments() 方法，返回符合接口契约的 ViralMoment[]
-- ✅ 实现 generateNarration() 方法，支持文件保存和 wordTimings 提取
-- ✅ 创建 HTTP API 路由：
-  - POST /api/gemini/detect-viral-moments
-  - POST /api/elevenlabs/generate-narration
-- ✅ 创建接口契约测试脚本 (scripts/test-api-contracts.ts)
-- 提交: 001f321
-
-**20:00** - Agent 2 完成剩余接口契约实现
-- ✅ 实现 extractStorylines(videoPath, minCount?) 方法
-  - 符合 IGeminiAPI 接口契约
-  - 内部调用 analyzeVideo + extractStorylinesFromAnalysis
-  - 支持按吸引力分数排序
-- ✅ 实现 generateNarration(storyline, style) 方法（Gemini）
-  - 符合 IGeminiAPI 接口契约
-  - 返回纯文本文案（非 RecapScript 对象）
-- ✅ 创建 HTTP API 路由：
-  - POST /api/gemini/extract-storylines
-  - POST /api/gemini/generate-narration
-- ✅ IGeminiAPI 和 IElevenLabsAPI 接口契约 100% 符合
-- 提交: a7827bf
-
-**21:00** - Agent 2 完成错误重试机制
-- ✅ 创建通用重试工具 (lib/api/utils/retry.ts)
-  - withRetry() - 带重试的异步函数执行器
-  - 支持指数退避策略（默认 1s → 2s → 4s → ...）
-  - 支持最大重试次数限制（默认 3 次）
-  - 智能错误识别（自动过滤不可重试的错误）
-- ✅ Gemini 客户端集成重试机制
-  - callApi() 方法应用 withRetry
-- ✅ ElevenLabs 客户端集成重试机制
-  - request() 和 textToSpeech() 方法应用 withRetry
-- ✅ 创建测试脚本 (scripts/test-retry.ts)
-- 提交: e863663
-
-**22:00** - Agent 2 完成 wordTimings 精确提取
-- ✅ 创建音频强制对齐工具 (lib/api/utils/alignment.ts)
-  - alignWordsBySyllables() - 基于音节数分配时间
-  - alignWordsByPunctuation() - 在标点符号处停顿
-  - alignWordsHybrid() - 混合策略（音节+标点）
-  - alignWordsSmart() - 智能选择最佳算法
-- ✅ 更新 ElevenLabs 客户端
-  - extractWordTimingsFromText() 支持智能对齐
-  - generateNarration() 启用智能对齐
-  - 预留 parseElevenLabsAlignment() 方法（等待 API 支持）
-- ✅ 创建测试脚本 (scripts/test-word-alignment.ts)
-- ✅ 预期准确度提升: 30-50%
-- 提交: cb94b7a
-
-**23:00** - Agent 2 完成流式响应处理
-- ✅ 创建流式响应工具 (lib/api/utils/streaming.ts)
-  - SSEStream - Server-Sent Events 流式响应
-  - StreamProgressTracker - 流式进度跟踪
-  - createMockStream - 模拟流式生成
-  - createStreamResponseHelper - Next.js 流式响应辅助函数
-- ✅ 更新 Gemini 客户端
-  - 添加 generateNarrationStream() 流式方法
-  - 添加 callApiStream() 流式 API 调用
-- ✅ 创建流式 API 路由
-  - POST /api/gemini/generate-narration-stream
-  - 返回 Server-Sent Events (SSE) 流式响应
-- ✅ 创建测试脚本 (scripts/test-streaming.ts)
-- ✅ 功能特性：实时进度推送、打字机效果、进度跟踪
-- 提交: 05b6692
-
-**23:30** - Agent 1 完成深度解说模式 UI
-- ✅ 创建 6 步骤流程界面 (app/recap/page.tsx)
-  - 步骤 1: 选择视频（从项目列表）
-  - 步骤 2: 提取故事线（AI 分析）
-  - 步骤 3: 选择故事线和文案风格
-  - 步骤 4: 生成解说文案（流式显示）
-  - 步骤 5: 生成语音（TTS）
-  - 步骤 6: 完成并下载视频
-- ✅ UI 组件
-  - StepIndicator - 步骤指示器
-  - 项目卡片、故事线卡片
-  - 文案风格选择（4 种风格）
-  - 流式文案生成显示
-  - 进度条和加载状态
-- ✅ 文案风格选项
-  - ⚡ 黄金 3 秒钩子
-  - ❓ 悬念式
-  - ❤️ 情感共鸣
-  - 🎭 犀利吐槽
-- ✅ 功能特性：流畅多步骤流程、实时进度、响应式设计
-- 提交: 8c07b41
+**Day 8-10**:
+- 各自测试功能
+- 修复 Bug
+- 性能优化
+- 文档更新
 
 ---
 
-## 🔧 快速参考
+## ✅ 开始前检查清单
 
-### 每个 Agent 开始工作前必做
+### Agent 1 检查清单
+- [ ] 查看 `app/projects/` 页面现状
+- [ ] 查看 `components/main-layout.tsx` 导航栏
+- [ ] 测试 `/api/projects` API
+- [ ] 确认项目选择器是否需要创建
 
-```bash
-# 1. 拉取最新代码
-git pull origin main
+### Agent 2 检查清单
+- [ ] 查看 `app/recap/` 页面现状
+- [ ] 确认 `shots` 表有 `semanticLabel` 字段
+- [ ] 查看 `lib/api/gemini.ts` API 封装
+- [ ] 选择 embedding 方案（OpenAI/Cohere/开源）
 
-# 2. 检查是否有新的接口定义
-cat types/api-contracts.ts
+---
 
-# 3. 检查协作文档
-cat COLLABORATION.md | grep "Agent <你的名称>" -A 20
+## 📞 每日同步格式
 
-# 4. 安装新依赖（如果有）
-npm install
+在 `docs/PROGRESS.md` 中追加：
 
-# 5. 开始工作
-```
+```markdown
+### 2025-02-XX Agent 1 进度
+- ✅ 完成：项目选择器组件
+- 🚧 进行中：高光切片播放器（50%）
+- 📋 明日：完成微调控件
 
-### 每个 Agent 完成任务时必做
-
-```bash
-# 1. 提交代码
-git add .
-git commit -m "遵循提交消息规范"
-
-# 2. 推送到远程
-git push origin main
-
-# 3. 更新本文档
-# 编辑 COLLABORATION.md 的"协作日志"部分
-
-# 4. 通知其他 Agent
-# 在提交消息中说明依赖和阻塞关系
+### 2025-02-XX Agent 2 进度
+- ✅ 完成：故事线提取 API
+- 🚧 进行中：语义向量化（30%）
+- 📋 明日：完成相似度算法
 ```
 
 ---
 
-## 🚨 当前阻塞项
+## 🎯 成功标准
 
-### Agent UI 被阻塞：
-- ✅ ~~等待 Agent Video 提供视频元数据 API~~（已完成 `/api/video/metadata`）
-- ✅ ~~等待 Agent API 提供 `detectViralMoments()` 函数~~（已完成 `/api/gemini/detect-viral-moments`）
-- ❌ 等待 Agent Video 提供 `uploadVideo()` 函数
-- ❌ 等待 Agent Video 完成 shots 数据（detectViralMoments 需要基于 shots 分析）
+### Agent 1 成功标准
+- ✅ 用户可以快速切换项目
+- ✅ 可以创建和管理项目/视频
+- ✅ 可以调整高光切点并渲染视频
+- ✅ 可以查看和管理所有任务
 
-### Agent API 被阻塞：
-- ✅ ~~等待实现 detectViralMoments() 函数~~（已完成）
-- ✅ ~~等待实现 generateNarration() 函数~~（已完成）
-- 📋 建议优先实现：完整视频分析功能（需要 Agent Video 的 shots 数据）
-- 📋 可选优化：完善 wordTimings 提取（当前使用文本分割作为临时方案）
-
-### Agent Video 被阻塞：
-- ❌ **`detectShots()` 功能被阻塞**
-  - 原因：`shots` 表缺少 `thumbnailPath` 字段
-  - 影响：无法存储镜头缩略图，导致模式 B（深度解说）无法正常工作
-  - 需要：Agent 4 在 `lib/db/schema.ts` 中添加字段：
-    ```typescript
-    // lib/db/schema.ts - shots 表
-    export const shots = sqliteTable('shots', {
-      // ... 现有字段
-      thumbnailPath: text('thumbnail_path'),  // ⚠️ 需要添加
-    });
-    ```
-  - 紧急程度：🔴 高（影响核心功能）
-
-### Agent Data 被阻塞：
-- ✅ ~~等待所有 Agent 完成数据模型设计~~（已完成）
-- 📋 **需要立即处理**：
-  1. 在 `shots` 表添加 `thumbnailPath` 字段
-  2. 创建数据库迁移脚本
-  3. 更新 `lib/db/queries.ts` 中的相关查询函数
-  4. 通知 Agent 3 可以继续实现 `detectShots()`
+### Agent 2 成功标准
+- ✅ 可以从视频提取故事线
+- ✅ 可以生成解说文案和 TTS
+- ✅ 解说词可以自动匹配画面
+- ✅ 可以渲染音画同步的解说视频
 
 ---
 
-## 📞 联系方式
-
-- **GitHub Issues**: https://github.com/iswangheng/AI-DramaCut/issues
-- **协作文档**: 本文件
-
----
-
-## 📚 相关文档
-
-- `CLAUDE.md` - 项目开发指导
-- `IMPLEMENTATION.md` - 开发进度记录
-- `DEPLOYMENT.md` - 部署运维文档
-- `types/api-contracts.ts` - 接口契约定义
-
----
-
-**更新频率**: 每次有新任务或依赖变化时更新
+**准备就绪！各自开始开发独立功能模块！** 🚀
