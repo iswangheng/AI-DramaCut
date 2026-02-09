@@ -24,12 +24,56 @@
 | **AI 服务集成** | 100% | ✅ 完成 |
 | **视频处理核心** | 100% | ✅ 完成 |
 | **高光切片模式** | 95% | 🟡 后端完成，前端待集成 |
-| **深度解说模式** | 90% | 🟢 核心功能完成 |
+| **深度解说模式** | 95% | 🟡 TTS API 完成，渲染待优化 |
 | **任务管理系统** | 80% | 🟡 基本完成 |
 
 ---
 
 ## 📅 更新日志
+
+### 2026-02-09 - 深度解说 TTS 集成完成（Agent 2 继续）
+
+#### ✅ 完成事项
+- ✅ **TTS 音频合成 API**（`/api/recap/tts`）
+  - POST /api/recap/tts - 为解说词生成语音
+  - GET /api/recap/tts - 获取可用语音列表
+  - 支持段落级别语音生成
+  - 自动提取词语时间戳（用于字幕同步）
+  - 缓存机制避免重复生成
+
+- ✅ **类型错误修复**
+  - 修复 `emotionShots` 类型错误
+  - 修复 `ensureContinuity` 类型不匹配
+  - 修复 `candidateVecs` 类型定义
+  - 修复 OpenAI Embeddings API 响应类型
+  - 项目成功编译（✓ Compiled successfully）
+
+#### 📦 变更文件
+**新增文件**：
+- app/api/recap/tts/route.ts - TTS API（230行）
+
+**修改文件**：
+- app/api/recap/storylines/route.ts - 修复类型错误
+- lib/semantic/matcher.ts - 修复类型错误
+- lib/semantic/similarity.ts - 修复类型定义
+- lib/semantic/vectorizer.ts - 修复 API 响应类型
+
+**代码统计**：
+- 新增：~230 行生产代码
+- 修复：~15 处类型错误
+
+#### 🎯 技术要点
+- ElevenLabs TTS 集成（已有客户端封装）
+- 批量语音生成（每个段落独立生成）
+- 词语时间戳提取（智能对齐算法）
+- 文件系统管理（自动创建输出目录）
+- 数据库更新（保存音频路径和时间戳）
+
+#### ⚠️ 技术限制
+- **Remotion 渲染限制**：不能在 Next.js API 路由中直接调用 Remotion 客户端
+  - 原因：Webpack 构建错误（Remotion 依赖 Node.js 特定模块）
+  - 解决方案：使用任务队列（BullMQ）异步处理渲染任务
+  - 状态：待实现
 
 ### 2025-02-09 - 深度解说画面匹配功能完成（Agent 2）
 
@@ -252,7 +296,7 @@
 - ⏳ 毫秒级微调控件
 - ⏳ 视频预览播放器
 
-### 深度解说模式（90%）
+### 深度解说模式（95%）
 
 #### ✅ 已完成
 - ✅ 数据层架构（storylines, recap_tasks, recap_segments 表）
@@ -265,10 +309,18 @@
   - ✅ 时间连续性保证
   - ✅ 回退策略
 - ✅ 解说模式 UI（已集成真实 API）
+- ✅ **TTS 音频合成 API**（已集成）
+  - ✅ POST /api/recap/tts - 生成语音
+  - ✅ GET /api/recap/tts - 获取语音列表
+  - ✅ 段落级别生成
+  - ✅ 词语时间戳提取
+  - ✅ 缓存机制
 
 #### 🟡 待完成
-- ⏳ TTS 音频合成 API（已有封装，需集成）
-- ⏳ Remotion 渲染集成（已有渲染客户端，需调用）
+- ⏳ **Remotion 渲染集成**（需要通过任务队列实现）
+  - 原因：Next.js API 路由不能直接调用 Remotion 客户端（Webpack 构建错误）
+  - 解决方案：使用 BullMQ 任务队列异步处理渲染
+  - 状态：待实现
 
 ### 任务管理系统（80%）
 

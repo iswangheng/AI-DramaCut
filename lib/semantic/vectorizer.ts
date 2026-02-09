@@ -75,7 +75,7 @@ export async function textEmbedding(text: string): Promise<TextEmbedding> {
 
     return {
       vector: embedding.embedding,
-      model: embedding.model,
+      model: response.model,
     };
   } catch (error) {
     if (error instanceof Error) {
@@ -118,7 +118,7 @@ export async function batchTextEmbedding(texts: string[]): Promise<TextEmbedding
 
     return response.data.map((item) => ({
       vector: item.embedding,
-      model: item.model,
+      model: response.model,
     }));
   } catch (error) {
     if (error instanceof Error) {

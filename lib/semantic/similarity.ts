@@ -79,7 +79,7 @@ export function cosineSimilarity(vecA: number[], vecB: number[]): number {
  */
 export function batchCosineSimilarity(
   targetVec: number[],
-  candidateVecs: number[]
+  candidateVecs: number[][]
 ): number[] {
   return candidateVecs.map((vec) => cosineSimilarity(targetVec, vec));
 }

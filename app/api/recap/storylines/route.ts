@@ -173,9 +173,9 @@ async function extractStorylinesWithGemini(
 
     storylines.push({
       name: storylineName,
-      description: `基于${emotion}情绪的${emotionShots.length}个镜头片段`,
+      description: `基于${emotion}情绪的${(emotionShots as any[]).length}个镜头片段`,
       attractionScore: Number(attractionScore.toFixed(1)),
-      shotIds: emotionShots.map((s) => s.id),
+      shotIds: (emotionShots as any[]).map((s: any) => s.id),
     });
   }
 

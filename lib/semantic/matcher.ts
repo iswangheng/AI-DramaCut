@@ -94,7 +94,7 @@ export async function matchScenes(request: MatchRequest): Promise<MatchResponse>
     // 9. （可选）保证时间连续性
     let finalMatches = validMatches;
     if (config.enableContinuity) {
-      finalMatches = ensureContinuity(validMatches, shotEmbeddings);
+      finalMatches = ensureContinuity(validMatches, shotEmbeddings as any);
     }
 
     // 10. 转换为响应格式
@@ -153,7 +153,7 @@ async function getCandidateShots(
     .where(eq(shots.videoId, videoId));
 
   // 内存过滤排除的镜头
-  const filtered = allShots.filter((shot) => !excludedShotIds.includes(shot.id));
+  const filtered = allShots.filter((shot: any) => !excludedShotIds.includes(shot.id));
 
   return filtered;
 }

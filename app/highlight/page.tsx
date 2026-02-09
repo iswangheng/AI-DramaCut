@@ -22,7 +22,8 @@ import {
   Edit,
   Check,
 } from "lucide-react";
-import { HighlightPlayer, formatMsToTime } from "@/components/highlight/highlight-player";
+// import { HighlightPlayer, formatMsToTime } from "@/components/highlight/highlight-player";
+import { formatMsToTime } from "@/components/highlight/highlight-player";
 
 interface HighlightClip {
   id: string;
