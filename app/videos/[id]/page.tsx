@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Clock, Eye, Sparkles, TreeDeciduous, Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Clock, Eye, Sparkles, TreeDeciduous, Loader2, RefreshCw, Play } from "lucide-react";
+import { VideoClipPlayer } from "@/components/video-clip-player";
 
 interface Shot {
   id: number;
@@ -33,6 +34,7 @@ interface Highlight {
   id: number;
   videoId: number;
   startMs: number;
+  endMs: number;
   reason: string;
   viralScore: number;
   category: string;
@@ -60,6 +62,13 @@ function VideoDetailContent({ videoId }: { videoId: string }) {
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectProgress, setDetectProgress] = useState(0);
   const [detectError, setDetectError] = useState<string | null>(null);
+
+  // 视频播放器状态
+  const [playingClip, setPlayingClip] = useState<{
+    videoPath: string;
+    startMs: number;
+    endMs: number;
+  } | null>(null);
 
   // 格式化时间
   const formatTime = (ms: number) => {
@@ -112,6 +121,25 @@ function VideoDetailContent({ videoId }: { videoId: string }) {
       console.error('轮询任务状态失败:', error);
       return false;
     }
+  };
+
+  // 播放视频片段
+  const handlePlayClip = (startMs: number, endMs: number) => {
+    if (!video) return;
+
+    // 构建视频 URL（需要确保可以被前端访问）
+    const videoUrl = `/api/videos/${videoId}/stream`;
+
+    setPlayingClip({
+      videoPath: videoUrl,
+      startMs,
+      endMs,
+    });
+  };
+
+  // 关闭播放器
+  const handleClosePlayer = () => {
+    setPlayingClip(null);
   };
 
   // 重新检测高光片段
@@ -329,6 +357,15 @@ function VideoDetailContent({ videoId }: { videoId: string }) {
                           <span className="text-sm text-muted-foreground">
                             {formatTime(shot.startMs)} - {formatTime(shot.endMs)}
                           </span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handlePlayClip(shot.startMs, shot.endMs)}
+                            className="gap-1 cursor-pointer h-7"
+                          >
+                            <Play className="w-3 h-3" />
+                            播放片段
+                          </Button>
                         </div>
                         {shot.viralScore && (
                           <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
@@ -452,6 +489,15 @@ function VideoDetailContent({ videoId }: { videoId: string }) {
                           <span className="text-sm text-muted-foreground">
                             {formatTime(highlight.startMs)}
                           </span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handlePlayClip(highlight.startMs, highlight.endMs)}
+                            className="gap-1 cursor-pointer h-7"
+                          >
+                            <Play className="w-3 h-3" />
+                            播放片段
+                          </Button>
                         </div>
                         <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
                           ⭐ {highlight.viralScore.toFixed(1)}
@@ -538,6 +584,16 @@ function VideoDetailContent({ videoId }: { videoId: string }) {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* 视频片段播放器 */}
+      {playingClip && (
+        <VideoClipPlayer
+          videoPath={playingClip.videoPath}
+          startMs={playingClip.startMs}
+          endMs={playingClip.endMs}
+          onClose={handleClosePlayer}
+        />
+      )}
     </div>
   );
 }
