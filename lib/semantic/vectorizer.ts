@@ -3,29 +3,32 @@
 // ============================================
 
 import OpenAI from 'openai';
-import { config } from '@/lib/config';
 import type { TextEmbedding, ShotEmbedding } from './types';
 import type { Shot } from '@/lib/db/schema';
 
 // ============================================
-// OpenAI 客户端初始化
+// OpenAI 客户端初始化（使用 yunwu.ai 代理）
 // ============================================
 
 let openaiClient: OpenAI | null = null;
 
 /**
  * 获取 OpenAI 客户端实例（懒加载）
+ *
+ * 使用 yunwu.ai 代理访问 OpenAI Embeddings API
+ * 兼容 OpenAI 格式，无需额外配置
  */
 function getOpenAIClient(): OpenAI {
   if (!openaiClient) {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.YUNWU_API_KEY;
 
     if (!apiKey) {
-      throw new Error('OPENAI_API_KEY 环境变量未配置');
+      throw new Error('YUNWU_API_KEY 环境变量未配置，请在 .env.local 中配置');
     }
 
     openaiClient = new OpenAI({
       apiKey,
+      baseURL: 'https://yunwu.ai/v1',  // 使用 yunwu.ai 代理
       timeout: 30000, // 30 秒超时
     });
   }

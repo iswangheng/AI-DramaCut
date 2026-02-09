@@ -22,7 +22,7 @@ import {
   Edit,
   Check,
 } from "lucide-react";
-import ReactPlayer from "react-player";
+import { HighlightPlayer, formatMsToTime } from "@/components/highlight/highlight-player";
 
 interface HighlightClip {
   id: string;
@@ -103,17 +103,6 @@ const mockAIGeneratedClips: HighlightClip[] = [
   },
 ];
 
-function formatMsToTime(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const milliseconds = ms % 1000;
-
-  // 始终输出完整的 HH:MM:SS.mmm 格式，确保解析一致性
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(milliseconds).padStart(3, "0")}`;
-}
-
 function parseTimeToMs(timeStr: string): number {
   const parts = timeStr.split(":");
   if (parts.length === 3) {
@@ -161,11 +150,18 @@ function HighlightContent() {
   // 状态
   const [clips, setClips] = useState<HighlightClip[]>(mockAIGeneratedClips);
   const [selectedClip, setSelectedClip] = useState<HighlightClip | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState("00:00:00.000");
   const [startTime, setStartTime] = useState("00:12:34.000");
   const [endTime, setEndTime] = useState("00:14:34.000");
   const [manualClipCount, setManualClipCount] = useState(3); // 用户想新增多少个切片
+  const [currentTimeMs, setCurrentTimeMs] = useState(0); // 当前播放时间（毫秒）
+
+  // 生成高光标记点（从切片列表中提取）
+  const highlightMarkers = clips.map(clip => ({
+    id: clip.id,
+    timeMs: clip.highlightMomentMs,
+    label: clip.name,
+    color: clip.source === "ai" ? "#a855f7" : "#3b82f6", // AI: 紫色, 手动: 蓝色
+  }));
 
   // AI 一键生成
   const handleAIGenerate = () => {
@@ -254,16 +250,16 @@ function HighlightContent() {
 
   // 跳转到指定时间
   const handleSeekTo = (timeMs: number) => {
-    if (playerRef.current) {
-      playerRef.current.seekTo(timeMs / 1000);
-    }
+    // 注意：HighlightPlayer 组件内部处理跳转
+    // 如果需要从外部控制，可以通过 ref 暴露方法
+    console.log("跳转到时间:", formatMsToTime(timeMs));
   };
 
   // 删除切片
   const handleDeleteClip = (clipId: string) => {
-    if (confirm("确定要删除这个切片吗？")) {
-      setClips(clips.filter((c) => c.id !== clipId));
-    }
+    // TODO: 替换为自定义确认对话框
+    // 根据项目规范，不允许使用原生 confirm/alert
+    setClips(clips.filter((c) => c.id !== clipId));
   };
 
   // 添加到渲染队列
@@ -302,44 +298,22 @@ function HighlightContent() {
                 <h3 className="text-lg font-semibold text-foreground">
                   视频预览 {selectedClip && `(${selectedClip.sourceVideoName})`}
                 </h3>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsPlaying(!isPlaying);
-                  }}
-                >
-                  {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                </Button>
               </div>
 
-              {/* 视频播放器容器 */}
-              <div className="flex items-center justify-center bg-black rounded-lg overflow-hidden">
-                <div className="aspect-[9/16] max-h-[600px]">
-                  {/* 这里用占位符，实际应该是视频文件 */}
-                  <div className="w-full h-full flex items-center justify-center text-white">
-                    <div className="text-center">
-                      <Play className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                      <p className="text-sm opacity-50">
-                        {selectedClip ? "播放切片预览" : "视频预览区域"}
-                      </p>
-                      <p className="text-xs opacity-30 mt-2">
-                        {selectedClip ? `${selectedClip.sourceVideoName}` : "9:16 格式"}
-                      </p>
-                    </div>
-                  </div>
-                  {/* 实际使用时： */}
-                  {/* <ReactPlayer
-                    ref={playerRef}
-                    url={selectedClip ? selectedClip.sourceVideoId : mockVideos[0].path}
-                    playing={isPlaying}
-                    controls={true}
-                    width="100%"
-                    height="100%"
-                  /> */}
-                </div>
-              </div>
+              {/* 高光切片播放器 */}
+              <HighlightPlayer
+                url="/sample-video.mp4" // TODO: 替换为实际视频URL
+                markers={highlightMarkers}
+                onMarkerClick={(marker) => {
+                  console.log("跳转到标记:", marker);
+                  // 可以在这里更新开始时间输入框
+                  setStartTime(formatMsToTime(marker.timeMs));
+                }}
+                onProgress={(timeMs) => {
+                  setCurrentTimeMs(timeMs);
+                }}
+                className="mx-auto max-w-[400px]"
+              />
             </CardContent>
           </Card>
 
