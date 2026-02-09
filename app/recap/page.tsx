@@ -116,6 +116,12 @@ function RecapContent() {
   const [outputPath, setOutputPath] = useState<string | null>(null);
   const [ws, setWs] = useState<WebSocket | null>(null);
 
+  // 重试机制状态
+  const [retryCount, setRetryCount] = useState(0);
+  const [maxRetries] = useState(3);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [errorType, setErrorType] = useState<'network' | 'api' | 'websocket' | 'unknown'>('unknown');
+
   // 加载项目列表
   useEffect(() => {
     loadProjects();
@@ -127,6 +133,45 @@ function RecapContent() {
       }
     };
   }, []);
+
+  // ============================================
+  // 错误分类辅助函数
+  // ============================================
+
+  /**
+   * 分类错误类型
+   */
+  const classifyError = (error: Error | string): 'network' | 'api' | 'websocket' | 'unknown' => {
+    const errorMsg = typeof error === 'string' ? error : error.message;
+
+    if (errorMsg.includes('fetch') || errorMsg.includes('network') || errorMsg.includes('ECONNREFUSED')) {
+      return 'network';
+    }
+
+    if (errorMsg.includes('WebSocket') || errorMsg.includes('连接')) {
+      return 'websocket';
+    }
+
+    if (errorMsg.includes('API') || errorMsg.includes('服务器') || errorMsg.includes('500')) {
+      return 'api';
+    }
+
+    return 'unknown';
+  };
+
+  /**
+   * 获取用户友好的错误消息
+   */
+  const getFriendlyErrorMessage = (errorType: 'network' | 'api' | 'websocket' | 'unknown', originalError?: string): string => {
+    const messages = {
+      network: '网络连接失败，请检查网络设置',
+      api: '服务器暂时无响应，请稍后重试',
+      websocket: '实时连接中断，请重新尝试',
+      unknown: originalError || '操作失败，请重试',
+    };
+
+    return messages[errorType];
+  };
 
   // WebSocket 消息处理
   useEffect(() => {
@@ -304,7 +349,70 @@ function RecapContent() {
     }
   };
 
-  // 步骤 4: 生成语音并开始渲染
+  // ============================================
+  // 步骤 4: 核心渲染逻辑（支持重试）
+  // ============================================
+
+  /**
+   * 执行渲染流程的核心逻辑
+   */
+  const executeRenderFlow = async (): Promise<void> => {
+    if (!generatedTaskId) {
+      throw new Error('缺少任务 ID');
+    }
+
+    // 1. 调用 TTS API 生成语音
+    setRenderMessage('正在生成语音...');
+    const ttsResponse = await fetch('/api/recap/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId: generatedTaskId }),
+    });
+
+    const ttsResult = await ttsResponse.json();
+
+    if (!ttsResult.success) {
+      throw new Error(ttsResult.message || '生成语音失败');
+    }
+
+    setRenderMessage('语音生成完成，正在准备渲染...');
+
+    // 2. 连接 WebSocket
+    const wsUrl = `ws://localhost:3001`;
+    const websocket = new WebSocket(wsUrl);
+
+    websocket.onopen = () => {
+      console.log('WebSocket 已连接');
+      setWs(websocket);
+    };
+
+    websocket.onerror = (wsError) => {
+      console.error('WebSocket 连接错误:', wsError);
+      // WebSocket 错误不中断流程，只是警告
+    };
+
+    // 3. 调用渲染 API
+    setRenderMessage('正在创建渲染任务...');
+    const renderResponse = await fetch('/api/recap/render-job', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId: generatedTaskId }),
+    });
+
+    const renderResult = await renderResponse.json();
+
+    if (!renderResult.success) {
+      throw new Error(renderResult.message || '创建渲染任务失败');
+    }
+
+    // 4. 保存渲染任务 ID，WebSocket 会监听进度
+    setRenderJobId(renderResult.data.jobId);
+    setRenderMessage('任务已创建，开始渲染...');
+  };
+
+  /**
+   * 步骤 4: 生成语音并开始渲染（带重试机制）
+   */
   const handleGenerateVoice = async () => {
     if (!generatedTaskId) {
       setError('缺少任务 ID，请重新生成文案');
@@ -314,64 +422,68 @@ function RecapContent() {
     setIsGenerating(true);
     setError(null);
     setRenderProgress(0);
-    setRenderMessage('正在生成语音...');
+    setRetryCount(0);
+    setErrorType('unknown');
     setCurrentStep(4); // 跳转到渲染进度页面
 
-    try {
-      // 1. 调用 TTS API 生成语音
-      const ttsResponse = await fetch('/api/recap/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId: generatedTaskId }),
-      });
+    // 重试循环
+    let lastError: Error | null = null;
 
-      const ttsResult = await ttsResponse.json();
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        // 如果不是第一次尝试，显示重试状态
+        if (attempt > 0) {
+          setIsRetrying(true);
+          setRetryCount(attempt);
+          setRenderMessage(`正在重试 (${attempt}/${maxRetries})...`);
 
-      if (!ttsResult.success) {
-        throw new Error(ttsResult.message || '生成语音失败');
+          // 指数退避：等待 2^attempt 秒
+          const delayMs = Math.pow(2, attempt) * 1000;
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+
+        // 执行渲染流程
+        await executeRenderFlow();
+
+        // 成功后退出重试循环
+        setIsRetrying(false);
+        setRetryCount(0);
+        setIsGenerating(false);
+        return;
+
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+
+        // 分类错误类型
+        const classifiedError = classifyError(lastError);
+        setErrorType(classifiedError);
+
+        // 记录错误
+        console.error(`渲染失败（尝试 ${attempt + 1}/${maxRetries + 1}）:`, lastError);
+
+        // 如果还有重试次数，继续循环
+        if (attempt < maxRetries) {
+          continue;
+        }
+
+        // 最后一次尝试也失败了
+        setIsRetrying(false);
+        const friendlyError = getFriendlyErrorMessage(classifiedError, lastError.message);
+        setError(friendlyError);
+        setIsGenerating(false);
+        // 不再自动返回步骤 3，让用户选择操作
       }
-
-      setRenderMessage('语音生成完成，正在准备渲染...');
-
-      // 2. 连接 WebSocket
-      const wsUrl = `ws://localhost:3001`; // WebSocket 服务器地址
-      const websocket = new WebSocket(wsUrl);
-
-      websocket.onopen = () => {
-        console.log('WebSocket 已连接');
-        setWs(websocket);
-      };
-
-      websocket.onerror = (error) => {
-        console.error('WebSocket 连接错误:', error);
-        setError('WebSocket 连接失败，将无法显示实时进度');
-      };
-
-      // 3. 调用渲染 API
-      const renderResponse = await fetch('/api/recap/render-job', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId: generatedTaskId }),
-      });
-
-      const renderResult = await renderResponse.json();
-
-      if (!renderResult.success) {
-        throw new Error(renderResult.message || '创建渲染任务失败');
-      }
-
-      // 4. 保存渲染任务 ID，WebSocket 会监听进度
-      setRenderJobId(renderResult.data.jobId);
-      setRenderMessage('任务已创建，开始渲染...');
-
-      setIsGenerating(false);
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : '生成语音失败';
-      setError(errorMsg);
-      console.error('生成语音失败:', error);
-      setIsGenerating(false);
-      setCurrentStep(3); // 返回上一步
     }
+  };
+
+  /**
+   * 手动重试（用户点击重试按钮）
+   */
+  const handleManualRetry = async () => {
+    setError(null);
+    setRetryCount(0);
+    setErrorType('unknown');
+    await handleGenerateVoice();
   };
 
   // 渲染步骤内容
@@ -658,19 +770,66 @@ function RecapContent() {
 
               {/* 错误提示 */}
               {error && (
-                <div className="max-w-md mx-auto mt-6 bg-destructive/10 border border-destructive/20 rounded-lg p-4">
-                  <p className="text-sm text-destructive">{error}</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-4"
-                    onClick={() => {
-                      setError(null);
-                      setCurrentStep(3);
-                    }}
-                  >
-                    返回重试
-                  </Button>
+                <div className="max-w-md mx-auto mt-6">
+                  <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 space-y-4">
+                    {/* 错误图标和消息 */}
+                    <div className="flex items-start gap-3">
+                      <div className="text-2xl">⚠️</div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-destructive mb-1">操作失败</p>
+                        <p className="text-sm text-destructive/90">{error}</p>
+                      </div>
+                    </div>
+
+                    {/* 错误类型指示 */}
+                    {errorType !== 'unknown' && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground bg-background/50 rounded px-2 py-1">
+                        <span>错误类型：</span>
+                        <span className="font-mono">
+                          {errorType === 'network' && '网络错误'}
+                          {errorType === 'api' && '服务器错误'}
+                          {errorType === 'websocket' && '连接错误'}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* 重试计数器 */}
+                    {retryCount > 0 && (
+                      <div className="text-xs text-muted-foreground">
+                        已自动重试 {retryCount} 次，均失败
+                      </div>
+                    )}
+
+                    {/* 操作按钮 */}
+                    <div className="flex gap-2 pt-2">
+                      <Button
+                        size="sm"
+                        className="flex-1"
+                        onClick={handleManualRetry}
+                      >
+                        点击重试
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          setError(null);
+                          setRetryCount(0);
+                          setCurrentStep(3);
+                        }}
+                      >
+                        返回上一步
+                      </Button>
+                    </div>
+
+                    {/* 帮助提示 */}
+                    {errorType === 'network' && (
+                      <div className="text-xs text-muted-foreground bg-background/50 rounded p-2">
+                        💡 <strong>提示：</strong>请检查网络连接是否正常，或尝试切换网络环境
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
