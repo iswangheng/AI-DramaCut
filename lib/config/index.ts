@@ -2,6 +2,18 @@
 // DramaGen AI 统一配置管理
 // ============================================
 
+// 加载环境变量（必须在所有其他代码之前）
+import * as dotenv from 'dotenv';
+import path from 'path';
+
+// 加载 .env.local 文件
+const envPath = path.join(process.cwd(), '.env.local');
+const result = dotenv.config({ path: envPath });
+
+if (result.error) {
+  console.warn('⚠️  [config] 警告: 无法加载 .env.local 文件:', result.error.message);
+}
+
 /**
  * 环境变量验证辅助函数
  * @throws 当必需的环境变量未定义时抛出错误
@@ -84,7 +96,7 @@ export const geminiConfig = {
   videoSampleFrameCount: getNumberEnv('GEMINI_VIDEO_SAMPLE_FRAME_COUNT', 30),
 
   // 请求超时配置（毫秒）
-  timeout: 120000, // 2 分钟
+  timeout: 600000, // 10 分钟（视频分析需要更长时间）
   retryAttempts: 3,
   retryDelay: 2000,
 } as const;

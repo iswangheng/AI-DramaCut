@@ -383,19 +383,8 @@ async function processAnalyzeJob(job: Job<AnalyzeJobData>) {
     console.log(`💾 保存了 ${shotsData.length} 个镜头切片（包含音频信息）`);
   }
 
-  // 3. 保存高光候选（自动生成）
-  if (analysis.highlights && analysis.highlights.length > 0) {
-    const highlightsData = analysis.highlights.map((timestampMs: any) => ({
-      videoId,
-      startMs: timestampMs,
-      reason: 'Gemini 自动检测',
-      viralScore: 7.0,
-      category: 'other' as const,
-    }));
-
-    await queries.highlight.createMany(highlightsData);
-    console.log(`💾 保存了 ${highlightsData.length} 个高光候选`);
-  }
+  // 注意：高光片段由专门的 detect-highlights 任务负责处理
+  // 这里不再创建占位符数据，避免数据不一致
 
   // 更新视频状态为 ready（分析完成）
   await queries.video.updateStatus(videoId, 'ready');
@@ -588,35 +577,47 @@ async function processExtractStorylinesJob(job: Job<ExtractStorylinesJobData>) {
 async function processDetectHighlightsJob(job: Job<DetectHighlightsJobData>) {
   const { videoPath, videoId } = job.data;
 
+  console.log(`🎬 [高光检测] 开始处理视频: ${videoPath}, ID: ${videoId}`);
+
   // 更新进度: 10%
   await job.updateProgress(10);
   wsServer.sendProgress(job.id!, 10, '开始检测高光时刻');
 
   // 首先分析视频
+  console.log(`📹 [高光检测] 步骤 1/2: 分析视频...`);
   const analysisResponse = await geminiClient.analyzeVideo(videoPath, undefined, (progress, message) => {
     const adjustedProgress = 10 + (progress * 0.4);
     job.updateProgress(adjustedProgress);
     wsServer.sendProgress(job.id!, adjustedProgress, message);
+    console.log(`📊 [高光检测] 视频分析进度: ${Math.round(adjustedProgress)}% - ${message}`);
   });
 
   if (!analysisResponse.success || !analysisResponse.data) {
-    throw new Error(analysisResponse.error || '视频分析失败');
+    const errorMsg = analysisResponse.error || '视频分析失败';
+    console.error(`❌ [高光检测] 视频分析失败: ${errorMsg}`);
+    throw new Error(errorMsg);
   }
 
   const analysis = analysisResponse.data;
+  console.log(`✅ [高光检测] 视频分析完成，场景数: ${analysis.scenes?.length || 0}`);
 
   // 更新进度: 50%
   await job.updateProgress(50);
   wsServer.sendProgress(job.id!, 50, '视频分析完成，检测高光时刻...');
 
   // 检测高光时刻
+  console.log(`✨ [高光检测] 步骤 2/2: 检测高光时刻...`);
   const highlightsResponse = await geminiClient.findHighlights(analysis, 100);
 
   if (!highlightsResponse.success || !highlightsResponse.data) {
-    throw new Error(highlightsResponse.error || '高光检测失败');
+    const errorMsg = highlightsResponse.error || '高光检测失败';
+    console.error(`❌ [高光检测] 高光检测失败: ${errorMsg}`);
+    console.error(`📄 [高光检测] 原始响应:`, JSON.stringify(highlightsResponse, null, 2));
+    throw new Error(errorMsg);
   }
 
   const highlights = highlightsResponse.data;
+  console.log(`✅ [高光检测] 检测到 ${highlights.length} 个高光时刻`);
 
   // 更新进度: 80%
   await job.updateProgress(80);
@@ -624,19 +625,20 @@ async function processDetectHighlightsJob(job: Job<DetectHighlightsJobData>) {
 
   // 保存高光到数据库
   const highlightsData = highlights.map((highlight: any) => {
-    const timestampMs = highlight.timestampMs || highlight.timestampMs;
+    const timestampMs = highlight.timestampMs || 0;
     return {
       videoId,
       startMs: timestampMs,
       endMs: timestampMs + ((highlight.suggestedDuration || 60) * 1000),
-      reason: highlight.description || '高光时刻',
+      reason: highlight.reason || highlight.description || '高光时刻',
       viralScore: highlight.viralScore || 7.0,
       category: highlight.category || 'other' as const,
     };
   });
 
+  console.log(`💾 [高光检测] 准备保存 ${highlightsData.length} 个高光时刻到数据库...`);
   await queries.highlight.createMany(highlightsData);
-  console.log(`💾 保存了 ${highlightsData.length} 个高光时刻`);
+  console.log(`✅ [高光检测] 成功保存 ${highlightsData.length} 个高光时刻`);
 
   // 更新进度: 100%
   await job.updateProgress(100);
@@ -645,6 +647,8 @@ async function processDetectHighlightsJob(job: Job<DetectHighlightsJobData>) {
     highlightCount: highlights.length,
     message: '高光检测完成',
   });
+
+  console.log(`🎉 [高光检测] 任务完成: ${videoId}, 高光数: ${highlights.length}`);
 
   return {
     success: true,

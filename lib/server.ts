@@ -4,6 +4,20 @@
 // Agent 4 - 服务器集成
 // ============================================
 
+// 加载环境变量（必须在所有其他导入之前）
+import * as dotenv from 'dotenv';
+import path from 'path';
+
+// 加载 .env.local 文件
+const envPath = path.join(process.cwd(), '.env.local');
+const result = dotenv.config({ path: envPath });
+
+if (result.error) {
+  console.warn('⚠️  警告: 无法加载 .env.local 文件:', result.error.message);
+} else {
+  console.log('✅ 环境变量已加载:', envPath);
+}
+
 import { createServer } from 'http';
 import { parse } from 'url';
 import next from 'next';

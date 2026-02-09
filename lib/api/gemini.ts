@@ -227,6 +227,29 @@ export class GeminiClient {
         temperature: this.temperature,
         maxOutputTokens: this.maxTokens,
       },
+      // 安全过滤器设置：降低阈值，允许分析影视内容
+      safetySettings: [
+        {
+          category: "HARM_CATEGORY_HARASSMENT",
+          threshold: "BLOCK_NONE"
+        },
+        {
+          category: "HARM_CATEGORY_HATE_SPEECH",
+          threshold: "BLOCK_NONE"
+        },
+        {
+          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+          threshold: "BLOCK_NONE"
+        },
+        {
+          category: "HARM_CATEGORY_HARASSMENT",
+          threshold: "BLOCK_NONE"
+        }
+      ]
     };
 
     // 添加系统指令（如果提供）
@@ -456,19 +479,51 @@ export class GeminiClient {
   }
 
   /**
-   * 解析 JSON 响应（带重试机制）
+   * 解析 JSON 响应（带重试机制和更好的容错性）
    */
   private parseJsonResponse<T>(text: string, retries = 3): T | null {
     for (let i = 0; i < retries; i++) {
       try {
-        // 尝试提取 JSON（处理 markdown 代码块）
-        const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/```\n([\s\S]*?)\n```/);
-        const jsonText = jsonMatch ? jsonMatch[1] : text;
-        return JSON.parse(jsonText) as T;
+        // 尝试多种 JSON 提取模式
+        let jsonText = text;
+
+        // 模式 1: 标准的 markdown json 代码块
+        const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
+        if (jsonMatch) {
+          jsonText = jsonMatch[1];
+        } else {
+          // 模式 2: 普通的代码块
+          const codeMatch = text.match(/```\n([\s\S]*?)\n```/);
+          if (codeMatch) {
+            jsonText = codeMatch[1];
+          } else {
+            // 模式 3: 查找第一个 { 和最后一个 } 之间的内容
+            const firstBrace = text.indexOf('{');
+            const lastBrace = text.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+              jsonText = text.substring(firstBrace, lastBrace + 1);
+            }
+          }
+        }
+
+        // 清理可能的额外文本
+        jsonText = jsonText.trim();
+
+        const parsed = JSON.parse(jsonText) as T;
+        console.log(`✅ JSON 解析成功 (尝试 ${i + 1}/${retries})`);
+        return parsed;
       } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.warn(`⚠️  JSON 解析失败 (尝试 ${i + 1}/${retries}): ${errorMsg}`);
+
         if (i === retries - 1) {
-          console.error('Failed to parse JSON response after retries:', error);
+          console.error('❌ JSON 解析彻底失败，响应内容:', text.substring(0, 500) + (text.length > 500 ? '...' : ''));
           return null;
+        }
+
+        // 短暂延迟后重试
+        if (i < retries - 1) {
+          // 可以添加一些清理逻辑
         }
       }
     }
@@ -790,18 +845,20 @@ ${sampleFrames && sampleFrames.length > 100 ? `注意：由于提供了高密度
    * @param count 需要返回的高光数量
    */
   async findHighlights(analysis: VideoAnalysis, count = 100): Promise<GeminiResponse<HighlightMoment[]>> {
-    const systemInstruction = `你是一位拥有上帝视角的爆款短视频制作人。
-你的任务是在提供的视频数据中，找出具有"短视频钩子"潜力的瞬间。
-重点关注：物理冲突（扇巴掌/推搡）、情感爆发（痛哭/狂笑）、身份反转（下跪/掏黑卡）、悬念高潮。`;
+    const systemInstruction = `你是一位专业的短视频内容分析师。
+你的任务是在提供的视频数据中，找出最具观众吸引力的精彩瞬间。
+重点关注：戏剧性冲突、情感转折、剧情反转、高潮时刻。`;
 
     const prompt = `基于以下视频分析结果，请找出 ${count} 个最具爆款潜力的高光时刻：
 
-**剧情梗概**：${analysis.summary}
+**视频时长**: ${Math.floor((analysis.durationMs || 0) / 1000)} 秒
 
-**故事线**：${analysis.storylines.join('、')}
+**剧情梗概**: ${analysis.summary}
 
-**已有场景**：
-${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)} - ${this.formatTime(s.endMs)}] ${s.description} (${s.emotion}, 分数: ${s.viralScore})`).join('\n')}
+**故事线**: ${analysis.storylines.join('、')}
+
+**场景详情**:
+${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)} - ${this.formatTime(s.endMs)}] ${s.description} (${s.emotion}, 爆款分数: ${s.viralScore}/10)`).join('\n')}
 
 请返回以下 JSON 格式：
 \`\`\`json

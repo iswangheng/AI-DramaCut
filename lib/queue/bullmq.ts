@@ -79,14 +79,18 @@ export class QueueManager {
   async addJob(queueName: string, jobType: string, data: Record<string, unknown>, options?: { delay?: number }) {
     const queue = this.getQueue(queueName);
 
+    // 生成唯一的 job ID，避免 BullMQ 自动生成的 ID 冲突
+    const uniqueJobId = `${queueName}-${jobType}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
     // 记录到数据库
     const job = await queue.add(jobType, data, {
+      jobId: uniqueJobId,
       delay: options?.delay,
     });
 
     // 保存任务记录到数据库
     await queries.queueJob.create({
-      jobId: job.id!,
+      jobId: uniqueJobId,
       queueName,
       jobType,
       payload: JSON.stringify(data),
@@ -95,7 +99,7 @@ export class QueueManager {
       updatedAt: new Date(),
     });
 
-    console.log(`📝 任务已添加: ${queueName}/${jobType} (Job ID: ${job.id})`);
+    console.log(`📝 任务已添加: ${queueName}/${jobType} (Job ID: ${uniqueJobId})`);
 
     return job;
   }

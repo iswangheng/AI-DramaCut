@@ -1,5 +1,6 @@
 // ============================================
 // 视频管理 API
+// GET /api/videos/:id - 获取视频详情
 // DELETE /api/videos/:id - 删除视频
 // ============================================
 
@@ -8,6 +9,60 @@ import { db, schema } from '@/lib/db';
 import { eq } from 'drizzle-orm';
 import { unlink } from 'fs/promises';
 import { join } from 'path';
+
+/**
+ * GET /api/videos/:id
+ * 获取单个视频的详情
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const videoId = parseInt(id);
+
+    if (isNaN(videoId)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: '无效的视频 ID',
+        },
+        { status: 400 }
+      );
+    }
+
+    // 查询视频详情
+    const [video] = await db
+      .select()
+      .from(schema.videos)
+      .where(eq(schema.videos.id, videoId));
+
+    if (!video) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: '视频不存在',
+        },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: video,
+    });
+  } catch (error) {
+    console.error('获取视频详情失败:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        message: error instanceof Error ? error.message : '获取视频详情失败',
+      },
+      { status: 500 }
+    );
+  }
+}
 
 /**
  * DELETE /api/videos/:id

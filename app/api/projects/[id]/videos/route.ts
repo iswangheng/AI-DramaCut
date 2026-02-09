@@ -139,20 +139,8 @@ export async function POST(
     try {
       console.log(`🚀 开始自动化处理流程: Video ID ${video.id}`);
 
-      // 1. 触发镜头检测任务（FFmpeg 镜头切分）
-      await queueManager.addJob(
-        QUEUE_NAMES.videoProcessing,
-        'extract-shots',
-        {
-          type: 'extract-shots',
-          videoPath: filePath,
-          videoId: video.id,
-        }
-      );
-
-      console.log(`✅ 镜头检测任务已加入队列: Video ID ${video.id}`);
-
-      // 2. 触发 Gemini 分析任务（深度理解 - 包含关键帧采样）
+      // 1. 触发 Gemini 分析任务（深度理解 - 包含关键帧采样）
+      // 注意：这个任务会自动完成镜头检测、分析，并保存详细的镜头信息
       await queueManager.addJob(
         QUEUE_NAMES.geminiAnalysis,
         'analyze',
@@ -165,7 +153,7 @@ export async function POST(
 
       console.log(`✅ Gemini 分析任务已加入队列: Video ID ${video.id}`);
 
-      // 3. 触发故事线提取任务（在分析完成后）
+      // 2. 触发故事线提取任务（在分析完成后）
       await queueManager.addJob(
         QUEUE_NAMES.geminiAnalysis,
         'extract-storylines',
@@ -178,7 +166,7 @@ export async function POST(
 
       console.log(`✅ 故事线提取任务已加入队列: Video ID ${video.id}`);
 
-      // 4. 触发高光检测任务（在分析完成后）
+      // 3. 触发高光检测任务（在分析完成后）
       await queueManager.addJob(
         QUEUE_NAMES.geminiAnalysis,
         'detect-highlights',
