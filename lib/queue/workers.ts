@@ -76,6 +76,12 @@ export type VideoJobData =
   | ExtractStorylinesJobData
   | DetectHighlightsJobData;
 
+// 深度解说渲染任务类型（单独定义，避免导入 Remotion）
+export interface RecapRenderJobData {
+  type: 'recap-render';
+  taskId: number;
+}
+
 // ============================================
 // Worker 处理函数
 // ============================================
@@ -799,6 +805,7 @@ export const processors = {
   processDetectHighlightsJob,
   processRenderJob,
   processTTSJob,
+  // processRecapRenderJob - 不在这里导出，避免导入 Remotion
 } as const;
 
 export default processors;

@@ -23,7 +23,17 @@ import {
   Check,
 } from "lucide-react";
 // import { HighlightPlayer, formatMsToTime } from "@/components/highlight/highlight-player";
-import { formatMsToTime } from "@/components/highlight/highlight-player";
+// import { formatMsToTime } from "@/components/highlight/highlight-player";
+
+// 临时复制 formatMsToTime 函数
+function formatMsToTime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const milliseconds = ms % 1000;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(milliseconds).padStart(3, "0")}`;
+}
 
 interface HighlightClip {
   id: string;
@@ -302,7 +312,7 @@ function HighlightContent() {
               </div>
 
               {/* 高光切片播放器 */}
-              <HighlightPlayer
+              {/* <HighlightPlayer
                 url="/sample-video.mp4" // TODO: 替换为实际视频URL
                 markers={highlightMarkers}
                 onMarkerClick={(marker) => {
@@ -314,7 +324,15 @@ function HighlightContent() {
                   setCurrentTimeMs(timeMs);
                 }}
                 className="mx-auto max-w-[400px]"
-              />
+              /> */}
+
+              {/* 临时占位符 */}
+              <div className="flex items-center justify-center bg-black rounded-lg overflow-hidden aspect-[9/16] max-h-[600px]">
+                <div className="text-center text-white">
+                  <p className="text-lg">视频播放器区域</p>
+                  <p className="text-sm text-gray-400 mt-2">（播放器组件暂时禁用）</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
 

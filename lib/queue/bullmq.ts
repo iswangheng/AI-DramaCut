@@ -275,6 +275,12 @@ export const videoJobsQueue = queueManager.getQueue(queueConfig.queues.videoProc
  */
 export const highlightClipsQueue = queueManager.getQueue('highlight-clips');
 
+/**
+ * 深度解说渲染队列
+ * 专门用于处理深度解说视频的渲染任务
+ */
+export const recapRenderQueue = queueManager.getQueue('recap-render');
+
 // 导出队列名称常量
 export const QUEUE_NAMES = queueConfig.queues;
 

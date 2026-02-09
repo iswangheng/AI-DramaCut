@@ -62,6 +62,24 @@ export async function initializeApp() {
       console.warn('⚠️  Redis 连接失败，任务队列功能将不可用:', error);
     }
 
+    // 5. 启动任务队列 Workers
+    console.log('👷 启动任务队列 Workers...');
+    try {
+      // 启动视频处理 Worker
+      await queueManager.createVideoWorker();
+
+      // 启动深度解说渲染 Worker
+      queueManager.createWorker('recap-render', async (job) => {
+        // 动态导入深度解说渲染处理器
+        const { processRecapRenderJob } = await import('../queue/workers/recap-render');
+        return await processRecapRenderJob(job);
+      });
+
+      console.log('✅ 任务队列 Workers 启动完成');
+    } catch (error) {
+      console.warn('⚠️  启动 Workers 失败:', error);
+    }
+
     console.log('🎉 DramaGen AI 初始化完成！');
 
     // 打印统计信息
