@@ -107,6 +107,7 @@ function RecapContent() {
   const [generatedNarration, setGeneratedNarration] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamProgress, setStreamProgress] = useState(0);
+  const [generatedTaskId, setGeneratedTaskId] = useState<number | null>(null);
 
   // 加载项目列表
   useEffect(() => {
@@ -151,39 +152,32 @@ function RecapContent() {
 
   // 步骤 2: 提取故事线
   const handleExtractStorylines = async () => {
-    setIsGenerating(true);
-    try {
-      // TODO: 调用 API 提取故事线
-      // const response = await fetch('/api/gemini/extract-storylines', {
-      //   method: 'POST',
-      //   body: JSON.stringify({ videoPath: '...' })
-      // });
+    if (!selectedProject) {
+      setError('请先选择项目');
+      return;
+    }
 
-      // 模拟数据
-      setTimeout(() => {
-        setStorylines([
-          {
-            id: "1",
-            name: "复仇主线",
-            description: "女主从被陷害到成功复仇的完整故事",
-            attractionScore: 9.5,
-          },
-          {
-            id: "2",
-            name: "情感线",
-            description: "男女主角之间的情感纠葛",
-            attractionScore: 8.8,
-          },
-          {
-            id: "3",
-            name: "反转线",
-            description: "隐藏身份的真实揭露",
-            attractionScore: 9.2,
-          },
-        ]);
-        setIsGenerating(false);
-      }, 2000);
+    setIsGenerating(true);
+    setError(null);
+    try {
+      // 调用真实 API 提取故事线
+      const response = await fetch('/api/recap/storylines', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId: selectedProject }),
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.message || '提取故事线失败');
+      }
+
+      setStorylines(result.data || []);
+      setIsGenerating(false);
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : '提取故事线失败';
+      setError(errorMsg);
       console.error("提取故事线失败:", error);
       setIsGenerating(false);
     }
@@ -200,37 +194,52 @@ function RecapContent() {
 
   // 步骤 4: 生成解说文案
   const handleGenerateNarration = async () => {
+    if (!selectedStoryline) {
+      setError('请先选择故事线');
+      return;
+    }
+
     setIsGenerating(true);
     setGeneratedNarration("");
     setStreamProgress(0);
+    setError(null);
 
     try {
-      // TODO: 调用流式 API
-      // const eventSource = new EventSource('/api/gemini/generate-narration-stream');
-      // eventSource.addEventListener("message", (e) => {
-      //   const chunk = JSON.parse(e.data);
-      //   setGeneratedNarration(prev => prev + chunk.text);
-      //   setStreamProgress(chunk.index * 10);
-      // });
+      // 调用真实 API 生成解说文案
+      const response = await fetch('/api/recap/scripts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storylineId: Number(selectedStoryline.id),
+          style: selectedStyle as any,
+        }),
+      });
 
-      // 模拟流式生成
-      const mockText = `你敢信？这个穷小子竟然是豪门继承人！
+      const result = await response.json();
 
-他一巴掌扇了过去，全场震惊。女主跪地痛哭，情感瞬间爆发。
+      if (!result.success) {
+        throw new Error(result.message || '生成解说文案失败');
+      }
 
-这个反转太刺激了！从被陷害到成功复仇，每一步都扣人心弦。`;
-      const words = mockText.split("");
-      let currentText = "";
+      // 模拟流式显示效果
+      const fullScript = result.data.script || '';
+      const words = fullScript.split('');
+      let currentText = '';
 
       for (let i = 0; i < words.length; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 30));
+        await new Promise((resolve) => setTimeout(resolve, 20));
         currentText += words[i];
         setGeneratedNarration(currentText);
         setStreamProgress(Math.round(((i + 1) / words.length) * 100));
       }
 
+      // 保存任务 ID 用于后续操作
+      setGeneratedTaskId(result.data.taskId);
+
       setIsGenerating(false);
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : '生成解说文案失败';
+      setError(errorMsg);
       console.error("生成解说文案失败:", error);
       setIsGenerating(false);
     }
