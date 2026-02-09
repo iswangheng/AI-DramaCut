@@ -388,6 +388,245 @@ git log -1 --stat
 
 ---
 
+# 🔧 开发环境维护和故障排查
+
+## 🚀 开发前检查清单
+
+**每次启动开发服务器前，务必执行以下检查：**
+
+### 1. 端口占用检查
+```bash
+# 检查并清理 3000 端口（Next.js）
+lsof -ti:3000 | xargs kill -9 2>/dev/null
+
+# 检查并清理 3001 端口（WebSocket）
+lsof -ti:3001 | xargs kill -9 2>/dev/null
+
+# 检查并清理 6379 端口（Redis）
+lsof -ti:6379 | xargs kill -9 2>/dev/null
+```
+
+### 2. Next.js 构建缓存清理（**重要**）
+
+**⚠️ 问题**：Next.js 构建缓存经常导致 `Internal Server Error`
+- 错误信息：`ENOENT: no such file or directory, open '.next/routes-manifest.json'`
+- 错误信息：`Cannot find module '.next/server/app/page.js'`
+
+**✅ 解决方案**：
+```bash
+# 删除 .next 缓存目录
+rm -rf .next
+
+# 重新启动开发服务器
+npm run dev
+```
+
+**为什么需要清理缓存？**
+- Next.js 的 `.next` 目录包含编译缓存
+- 代码变更后缓存可能不兼容
+- 导致模块找不到或路由清单缺失
+- **每次遇到 Internal Server Error 时，首先尝试清理缓存**
+
+### 3. 依赖服务检查
+```bash
+# 检查 Redis 是否运行
+redis-cli ping
+# 应该返回: PONG
+
+# 如果没有运行，启动 Redis
+# macOS:
+brew services start redis
+# Linux:
+sudo systemctl start redis
+```
+
+### 4. 环境变量检查
+```bash
+# 确保环境变量文件存在
+ls -la .env.local
+
+# 如果不存在，从示例创建
+cp .env.example .env.local
+```
+
+## 🐛 常见问题和解决方案
+
+### 问题 1：Internal Server Error（500）
+
+**症状**：
+- 浏览器显示 `Internal Server Error`
+- 服务器日志显示 `.next/routes-manifest.json` 找不到
+
+**原因**：
+- Next.js 构建缓存损坏
+- `.next` 目录中的编译产物不完整
+
+**解决方案**：
+```bash
+# 1. 停止开发服务器（Ctrl+C）
+# 2. 删除缓存
+rm -rf .next
+# 3. 重新启动
+npm run dev
+```
+
+**预防措施**：
+- ✅ 每次拉取新代码后清理缓存
+- ✅ 遇到编译错误后清理缓存
+- ✅ 切换 Git 分支后清理缓存
+
+### 问题 2：端口被占用
+
+**症状**：
+```
+Error: listen EADDRINUSE: address already in use :::3000
+```
+
+**解决方案**：
+```bash
+# 查找并关闭占用端口的进程
+lsof -ti:3000 | xargs kill -9
+
+# 或者使用单个命令清理所有端口
+lsof -ti:3000,3001,6379 | xargs kill -9 2>/dev/null
+```
+
+### 问题 3：Redis 连接失败
+
+**症状**：
+```
+Error: connect ECONNREFUSED 127.0.0.1:6379
+```
+
+**解决方案**：
+```bash
+# macOS
+brew services start redis
+
+# Linux
+sudo systemctl start redis
+
+# 验证连接
+redis-cli ping
+```
+
+### 问题 4：数据库文件不存在
+
+**症状**：
+```
+Error: Cannot open database because the directory does not exist
+```
+
+**解决方案**：
+```bash
+# 创建 data 目录
+mkdir -p data
+
+# 初始化数据库
+npm run db:push
+```
+
+### 问题 5：模块找不到
+
+**症状**：
+```
+Error: Cannot find module 'xxx'
+```
+
+**解决方案**：
+```bash
+# 重新安装依赖
+rm -rf node_modules package-lock.json
+npm install
+
+# 如果是 TypeScript 错误，检查类型定义
+npm install --save-dev @types/xxx
+```
+
+## 📋 开发启动完整流程
+
+**推荐的开发环境启动步骤：**
+
+```bash
+# 1. 清理端口占用
+lsof -ti:3000,3001,6379 | xargs kill -9 2>/dev/null
+
+# 2. 清理 Next.js 缓存（重要！）
+rm -rf .next
+
+# 3. 确保服务运行
+redis-cli ping || brew services start redis
+
+# 4. 启动开发服务器
+npm run dev
+
+# 5. 等待启动完成，看到：
+# ✓ Compiled in XXms
+# 📍 本地: http://localhost:3000
+```
+
+## 🔄 开发环境重置
+
+**如果遇到无法解决的问题，执行完整重置：**
+
+```bash
+# 1. 停止所有相关进程
+lsof -ti:3000,3001,6379 | xargs kill -9 2>/dev/null
+
+# 2. 清理所有缓存和构建产物
+rm -rf .next node_modules package-lock.json data/*.db
+
+# 3. 重新安装依赖
+npm install
+
+# 4. 初始化数据库
+npm run db:push
+
+# 5. 启动开发服务器
+npm run dev
+```
+
+## 💡 开发最佳实践
+
+### 避免缓存问题
+- ✅ **遇到错误时先清理 `.next`**
+- ✅ **Git 操作后清理缓存**
+  - `git pull` 后
+  - `git checkout` 切换分支后
+  - `git merge` 后
+- ✅ **大幅代码变更后清理缓存**
+
+### 节省时间的小技巧
+```bash
+# 创建快捷命令（添加到 ~/.zshrc 或 ~/.bashrc）
+alias restart-dev='lsof -ti:3000,3001 | xargs kill -9 2>/dev/null; rm -rf .next; npm run dev'
+alias clean-next='rm -rf .next'
+
+# 使用快捷命令
+restart-dev  # 一键重启开发服务器
+clean-next   # 一键清理 Next.js 缓存
+```
+
+### 定期维护
+```bash
+# 每周执行一次（保持开发环境健康）
+npm cache clean --force
+rm -rf .next node_modules/.cache
+```
+
+## 📝 问题排查检查清单
+
+当遇到问题时，按顺序检查：
+
+- [ ] **端口占用**：运行 `lsof -ti:3000 | xargs kill -9`
+- [ ] **Next.js 缓存**：运行 `rm -rf .next`
+- [ ] **Redis 运行**：运行 `redis-cli ping`
+- [ ] **依赖完整**：运行 `npm install`
+- [ ] **环境变量**：检查 `.env.local` 是否存在
+- [ ] **数据库**：运行 `npm run db:push`
+
+---
+
 # 项目概述
 
 DramaGen AI 是一款面向短剧/漫剧剪辑师、投放运营及自媒体博主的智能化视频生产工具。系统深度集成 Gemini 3 的多模态理解能力，实现从原始长视频到高点击短视频的自动化/半自动化产出。
