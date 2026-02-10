@@ -841,24 +841,27 @@ ${sampleFrames && sampleFrames.length > 100 ? `注意：由于提供了高密度
 
   /**
    * 检测高光时刻（模式 A）
+   * @param videoPath 视频文件路径（必须提供，用于上传视频）
    * @param analysis 之前的视频分析结果
    * @param count 需要返回的高光数量
    */
-  async findHighlights(analysis: VideoAnalysis, count = 100): Promise<GeminiResponse<HighlightMoment[]>> {
+  async findHighlights(videoPath: string, analysis: VideoAnalysis, count = 100): Promise<GeminiResponse<HighlightMoment[]>> {
     const systemInstruction = `你是一位专业的短视频内容分析师。
 你的任务是在提供的视频数据中，找出最具观众吸引力的精彩瞬间。
-重点关注：戏剧性冲突、情感转折、剧情反转、高潮时刻。`;
+重点关注：戏剧性冲突、情感转折、剧情反转、高潮时刻。
 
-    const prompt = `基于以下视频分析结果，请找出 ${count} 个最具爆款潜力的高光时刻：
+**重要**：你必须观看实际视频画面来检测高光时刻，不能仅基于文字描述编造内容。
+每个高光时刻都必须对应真实存在的画面和情节。`;
 
+    const prompt = `我已上传了完整的视频文件，请你观看视频并找出 ${count} 个最具爆款潜力的高光时刻。
+
+参考信息（帮助你理解视频内容）：
 **视频时长**: ${Math.floor((analysis.durationMs || 0) / 1000)} 秒
-
 **剧情梗概**: ${analysis.summary}
-
 **故事线**: ${analysis.storylines.join('、')}
 
-**场景详情**:
-${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)} - ${this.formatTime(s.endMs)}] ${s.description} (${s.emotion}, 爆款分数: ${s.viralScore}/10)`).join('\n')}
+**初步场景分析**（仅供参考，请以实际视频为准）:
+${analysis.scenes.slice(0, 10).map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)} - ${this.formatTime(s.endMs)}] ${s.description} (${s.emotion}, 爆款分数: ${s.viralScore}/10)`).join('\n')}
 
 请返回以下 JSON 格式：
 \`\`\`json
@@ -866,16 +869,22 @@ ${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)} - ${th
   "highlights": [
     {
       "timestampMs": 15400,
-      "reason": "推荐理由（30字以内）",
+      "reason": "推荐理由（30字以内，描述实际看到的画面）",
       "viralScore": 9.5,
       "category": "conflict|emotional|reversal|climax|other",
       "suggestedDuration": 90
     }
   ]
 }
-\`\`\``;
+\`\`\`
 
-    const response = await this.callApi(prompt, systemInstruction);
+**注意**：
+1. 必须基于实际视频内容，不要编造不存在的情节
+2. timestampMs 必须精确到毫秒
+3. reason 必须描述真实看到的画面（如："角色A说出反转台词"，而不是可能的反转）`;
+
+    // 使用视频上传方式调用 API（让 Gemini 能看到实际视频）
+    const response = await this.analyzeVideoWithUpload(videoPath, prompt, systemInstruction);
 
     if (!response.success || !response.data) {
       return response as GeminiResponse<HighlightMoment[]>;
@@ -925,8 +934,8 @@ ${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)} - ${th
 
     const analysis = analysisResponse.data;
 
-    // 然后检测高光时刻
-    const highlightsResponse = await this.findHighlights(analysis, maxResults);
+    // 然后检测高光时刻（传递 videoPath 让 Gemini 能看到实际视频）
+    const highlightsResponse = await this.findHighlights(videoPath, analysis, maxResults);
 
     if (!highlightsResponse.success || !highlightsResponse.data) {
       return {

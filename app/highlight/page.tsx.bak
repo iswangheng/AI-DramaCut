@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { MainLayout } from "@/components/main-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,7 +21,6 @@ import {
   Trash2,
   Edit,
   Check,
-  Loader2,
 } from "lucide-react";
 // import { HighlightPlayer, formatMsToTime } from "@/components/highlight/highlight-player";
 // import { formatMsToTime } from "@/components/highlight/highlight-player";
@@ -160,42 +159,12 @@ function HighlightContent() {
   const playerRef = useRef<any>(null);
 
   // 状态
-  const [clips, setClips] = useState<HighlightClip[]>([]);
+  const [clips, setClips] = useState<HighlightClip[]>(mockAIGeneratedClips);
   const [selectedClip, setSelectedClip] = useState<HighlightClip | null>(null);
   const [startTime, setStartTime] = useState("00:12:34.000");
   const [endTime, setEndTime] = useState("00:14:34.000");
-  const [manualClipCount, setManualClipCount] = useState(3);
-  const [currentTimeMs, setCurrentTimeMs] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isDetecting, setIsDetecting] = useState(false);
-  const [currentVideoId, setCurrentVideoId] = useState<number | null>(4); // 默认视频ID
-
-  // 加载高光数据
-  const loadHighlights = async (videoId: number) => {
-    try {
-      setIsLoading(true);
-      const response = await fetch(`/api/videos/${videoId}/highlights`);
-      const result = await response.json();
-
-      if (result.success) {
-        setClips(result.data || []);
-        console.log(`✅ 加载了 ${result.count || 0} 个高光切片`);
-      } else {
-        console.error('加载高光失败:', result.error);
-      }
-    } catch (error) {
-      console.error('加载高光失败:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 页面加载时获取高光数据
-  useEffect(() => {
-    if (currentVideoId) {
-      loadHighlights(currentVideoId);
-    }
-  }, [currentVideoId]);
+  const [manualClipCount, setManualClipCount] = useState(3); // 用户想新增多少个切片
+  const [currentTimeMs, setCurrentTimeMs] = useState(0); // 当前播放时间（毫秒）
 
   // 生成高光标记点（从切片列表中提取）
   const highlightMarkers = clips.map(clip => ({
@@ -205,43 +174,31 @@ function HighlightContent() {
     color: clip.source === "ai" ? "#a855f7" : "#3b82f6", // AI: 紫色, 手动: 蓝色
   }));
 
-  // AI 一键生成（触发真实的高光检测任务）
-  const handleAIGenerate = async () => {
-    if (!currentVideoId) {
-      console.error('没有选择视频');
-      return;
-    }
+  // AI 一键生成
+  const handleAIGenerate = () => {
+    // 模拟 AI 生成过程
+    const newClips: HighlightClip[] = [
+      {
+        id: `ai-new-${Date.now()}`,
+        name: "感情升温场景",
+        sourceVideoId: "1",
+        sourceVideoName: "霸道总裁爱上我.ep1.mp4",
+        highlightMomentMs: 2465000,
+        originalDurationMs: 5000,
+        startMs: 2465000,
+        endMs: 2585000,
+        finalDurationMs: 120000,
+        crossesEpisode: false,
+        source: "ai",
+        viralScore: 91,
+        reason: "浪漫场景，感情升温",
+        status: "pending",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ];
 
-    try {
-      setIsDetecting(true);
-
-      // 调用 API 触发高光检测
-      const response = await fetch(`/api/videos/${currentVideoId}/highlights/detect`, {
-        method: 'POST',
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        console.log('✅ 高光检测任务已添加到队列:', result.data);
-
-        // 提示用户任务已提交
-        alert('高光检测任务已添加到队列，请稍后刷新页面查看结果');
-
-        // 30秒后自动刷新数据
-        setTimeout(() => {
-          loadHighlights(currentVideoId);
-        }, 30000);
-      } else {
-        console.error('触发高光检测失败:', result.error);
-        alert(`触发高光检测失败: ${result.error}`);
-      }
-    } catch (error) {
-      console.error('触发高光检测失败:', error);
-      alert('触发高光检测失败，请查看控制台');
-    } finally {
-      setIsDetecting(false);
-    }
+    setClips([...clips, ...newClips]);
   };
 
   // 手动新增切片
@@ -316,38 +273,13 @@ function HighlightContent() {
     setClips(clips.filter((c) => c.id !== clipId));
   };
 
-  // 添加到渲染队列（触发真实的渲染任务）
-  const handleAddToQueue = async (clipId: string) => {
-    try {
-      // 从 clipId 中提取 highlightId（格式：highlight-{id}）
-      const highlightId = clipId.replace('highlight-', '');
-
-      // 调用渲染 API
-      const response = await fetch(`/api/highlights/${highlightId}/render`, {
-        method: 'POST',
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        console.log('✅ 渲染任务已添加:', result.data);
-
-        // 更新本地状态
-        setClips(
-          clips.map((c) =>
-            c.id === clipId ? { ...c, status: "in_queue" as const } : c
-          )
-        );
-
-        alert('渲染任务已添加到队列');
-      } else {
-        console.error('添加渲染任务失败:', result.error);
-        alert(`添加渲染任务失败: ${result.error}`);
-      }
-    } catch (error) {
-      console.error('添加渲染任务失败:', error);
-      alert('添加渲染任务失败，请查看控制台');
-    }
+  // 添加到渲染队列
+  const handleAddToQueue = (clipId: string) => {
+    setClips(
+      clips.map((c) =>
+        c.id === clipId ? { ...c, status: "in_queue" as const } : c
+      )
+    );
   };
 
   return (
@@ -554,24 +486,12 @@ function HighlightContent() {
                   e.stopPropagation();
                   handleAIGenerate();
                 }}
-                disabled={isDetecting || isLoading}
               >
-                {isDetecting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    检测中...
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="w-4 h-4" />
-                    AI 一键生成高光切片
-                  </>
-                )}
+                <Wand2 className="w-4 h-4" />
+                AI 一键生成高光切片
               </Button>
               <p className="text-xs text-muted-foreground mt-2 text-center">
-                {isDetecting
-                  ? '正在调用 AI 分析视频，请稍候...'
-                  : 'AI 将自动检测病毒传播时刻'}
+                AI 将自动检测病毒传播时刻
               </p>
             </CardContent>
           </Card>
@@ -601,27 +521,7 @@ function HighlightContent() {
 
           {/* 切片列表 */}
           <div className="space-y-3 max-h-[600px] overflow-y-auto">
-            {isLoading ? (
-              <Card>
-                <CardContent className="p-12 text-center">
-                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
-                  <p className="text-muted-foreground">正在加载高光数据...</p>
-                </CardContent>
-              </Card>
-            ) : clips.length === 0 ? (
-              <Card>
-                <CardContent className="p-12 text-center">
-                  <div className="text-5xl mb-4">🎬</div>
-                  <p className="text-muted-foreground mb-4">
-                    还没有任何切片
-                  </p>
-                  <p className="text-sm text-muted-foreground mb-6">
-                    点击"AI 一键生成"开始检测高光时刻
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              clips.map((clip) => (
+            {clips.map((clip) => (
               <Card
                 key={clip.id}
                 className={`cursor-pointer transition-base ${
@@ -737,9 +637,23 @@ function HighlightContent() {
                   )}
                 </CardContent>
               </Card>
-            ))
-            )}
+            ))}
           </div>
+
+          {/* 空状态 */}
+          {clips.length === 0 && (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <div className="text-5xl mb-4">🎬</div>
+                <p className="text-muted-foreground mb-4">
+                  还没有任何切片
+                </p>
+                <p className="text-sm text-muted-foreground mb-6">
+                  点击"AI 一键生成"或"手动新增"开始
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

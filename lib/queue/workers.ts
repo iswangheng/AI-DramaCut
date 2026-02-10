@@ -605,9 +605,10 @@ async function processDetectHighlightsJob(job: Job<DetectHighlightsJobData>) {
   await job.updateProgress(50);
   wsServer.sendProgress(job.id!, 50, '视频分析完成，检测高光时刻...');
 
-  // 检测高光时刻
+  // 检测高光时刻（上传视频文件，让 Gemini 能看到实际画面）
   console.log(`✨ [高光检测] 步骤 2/2: 检测高光时刻...`);
-  const highlightsResponse = await geminiClient.findHighlights(analysis, 100);
+  console.log(`📹 [高光检测] 上传视频文件用于高光检测（避免编造内容）`);
+  const highlightsResponse = await geminiClient.findHighlights(videoPath, analysis, 100);
 
   if (!highlightsResponse.success || !highlightsResponse.data) {
     const errorMsg = highlightsResponse.error || '高光检测失败';

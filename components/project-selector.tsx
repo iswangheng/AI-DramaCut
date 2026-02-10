@@ -72,7 +72,7 @@ export function ProjectSelector() {
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger
         className={cn(
-          "w-full mx-3 mt-4 p-2.5",
+          "mx-3 mt-4 p-2.5",
           "bg-muted/50 border border-border rounded-xl",
           "cursor-pointer transition-all",
           "hover:bg-muted hover:border-border/80",
@@ -94,7 +94,7 @@ export function ProjectSelector() {
 
       <DropdownMenuContent
         align="start"
-        className="w-[230px] max-h-[480px] overflow-y-auto"
+        className="w-[236px] max-h-[480px] overflow-y-auto"
       >
         {/* 当前项目信息 */}
         {currentProject && (

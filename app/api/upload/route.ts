@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         filename: file.name,
-        filePath: `/data/uploads/${filename}`, // 相对路径
+        filePath: `data/uploads/${filename}`, // 相对于项目根目录的相对路径
         fileSize: file.size,
         ...apiMetadata,
       },

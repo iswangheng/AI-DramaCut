@@ -39,11 +39,6 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
-  // 查看视频详情
-  const handleViewVideo = (videoId: number) => {
-    router.push(`/videos/${videoId}`);
-  };
-
   // 加载项目详情和视频列表
   const loadData = async () => {
     try {
@@ -234,8 +229,7 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
       {/* 视频列表 */}
       <div className="space-y-4">
         {videos.map((video) => (
-          <Card key={video.id} className="hover:shadow-md transition-shadow cursor-pointer"
-            onClick={() => handleViewVideo(video.id!)}>
+          <Card key={video.id} className="hover:shadow-md transition-base">
             <CardContent className="p-6">
               <div className="flex items-start gap-6">
                 {/* 缩略图 */}
@@ -270,7 +264,7 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleViewVideo(video.id!); }}>
+                        <DropdownMenuItem>
                           <Eye className="w-4 h-4 mr-2" />
                           查看详情
                         </DropdownMenuItem>

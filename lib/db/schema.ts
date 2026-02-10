@@ -62,6 +62,11 @@ export const videos = sqliteTable('videos', {
     .notNull()
     .default('uploading'),                                  // 处理状态
 
+  // 集数信息（新增）
+  episodeNumber: integer('episode_number'),               // 第几集（用户输入）
+  displayTitle: text('display_title'),                     // 显示标题（如：第1集：午夜凶铃）
+  sortOrder: integer('sort_order').notNull().default(0),  // 排序顺序
+
   // AI 分析结果
   summary: text('summary'),                                // 剧情梗概
   viralScore: real('viral_score'),                         // 爆款分数 (0-10)
@@ -103,23 +108,24 @@ export const shots = sqliteTable('shots', {
 });
 
 // ============================================
-// 3. 故事线表 (storylines)
+// 3. 故事线表 (storylines) - 重新设计：属于项目层级
 // ============================================
 export const storylines = sqliteTable('storylines', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  videoId: integer('video_id').notNull().references(() => videos.id, { onDelete: 'cascade' }),
+  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),  // 属于项目
 
   // 故事线信息
-  name: text('name').notNull(),                            // 故事线名称
-  description: text('description').notNull(),              // 详细描述
+  name: text('name').notNull(),                            // 故事线名称（如："复仇线"、"身份谜团线"）
+  description: text('description').notNull(),              // 详细描述（如："女主从受辱到成功复仇的完整历程"）
   attractionScore: real('attraction_score').notNull(),     // 吸引力分数 (0-10)
 
-  // 关联的镜头（JSON 数组，存储 shot_id）
-  shotIds: text('shot_ids').notNull(),                     // 关联的镜头 ID 列表
+  // 全局信息
+  episodeCount: integer('episode_count').notNull().default(1),  // 跨越几集
+  totalDurationMs: integer('total_duration_ms'),           // 总时长（毫秒）
 
   // 故事线类型
   category: text('category', {
-    enum: ['revenge', 'romance', 'identity', 'power', 'family', 'other']
+    enum: ['revenge', 'romance', 'identity', 'mystery', 'power', 'family', 'suspense', 'other']
   }).notNull().default('other'),
 
   ...timestamps,
@@ -151,6 +157,30 @@ export const highlights = sqliteTable('highlights', {
 
   // 导出状态
   exportedPath: text('exported_path'),                     // 导出文件路径
+
+  ...timestamps,
+});
+
+// ============================================
+// 3.5. 故事线片段表 (storyline_segments) - 新增
+// ============================================
+export const storylineSegments = sqliteTable('storyline_segments', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  storylineId: integer('storyline_id').notNull().references(() => storylines.id, { onDelete: 'cascade' }),  // 属于哪个 storyline
+  videoId: integer('video_id').notNull().references(() => videos.id, { onDelete: 'cascade' }),  // 来自哪一集
+
+  // 时间信息
+  startMs: integer('start_ms').notNull(),                  // 开始时间（毫秒）
+  endMs: integer('end_ms').notNull(),                      // 结束时间（毫秒）
+
+  // 该片段在 storyline 中的顺序
+  segmentOrder: integer('segment_order').notNull(),       // 顺序（1, 2, 3...）
+
+  // 片段描述
+  description: text('description').notNull(),              // 片段描述（如："婉清受辱，发誓复仇"）
+
+  // 关联的镜头（可选：如果需要更细粒度）
+  shotIds: text('shot_ids'),                               // 使用的镜头ID列表（JSON数组）
 
   ...timestamps,
 });
@@ -248,6 +278,35 @@ export const queueJobs = sqliteTable('queue_jobs', {
 });
 
 // ============================================
+// 8. 项目级分析表 (project_analysis) - 新增
+// ============================================
+export const projectAnalysis = sqliteTable('project_analysis', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),  // 关联项目
+
+  // 全局剧情理解
+  mainPlot: text('main_plot'),                             // 主线剧情梗概
+  subplotCount: integer('subplot_count').default(0),       // 支线数量
+
+  // 人物关系图谱（JSON）
+  characterRelationships: text('character_relationships'),  // 人物关系变化
+  // 例子：{"ep1": {"婉清": ["受欺负", "隐忍"]}, "ep3": {"婉清": ["觉醒", "反击"]}}
+
+  // 跨集伏笔（JSON）
+  foreshadowings: text('foreshadowings'),                   // 伏笔设置与揭晓
+  // 例子：[{"set_up": "ep1-15:00", "payoff": "ep5-10:00", "description": "骨血灯秘密"}]
+
+  // 跨集高光候选（JSON）
+  crossEpisodeHighlights: text('cross_episode_highlights'), // 跨越多集的精彩片段
+  // 例子：[{"start_ep": 1, "start_ms": 85000, "end_ep": 2, "end_ms": 15000, "description": "从昏迷到逃生的完整情节"}]
+
+  // 分析时间
+  analyzedAt: integer('analyzed_at', { mode: 'timestamp' }),
+
+  ...timestamps,
+});
+
+// ============================================
 // 类型导出
 // ============================================
 
@@ -262,6 +321,12 @@ export type NewShot = typeof shots.$inferInsert;
 
 export type Storyline = typeof storylines.$inferSelect;
 export type NewStoryline = typeof storylines.$inferInsert;
+
+export type StorylineSegment = typeof storylineSegments.$inferSelect;
+export type NewStorylineSegment = typeof storylineSegments.$inferInsert;
+
+export type ProjectAnalysis = typeof projectAnalysis.$inferSelect;
+export type NewProjectAnalysis = typeof projectAnalysis.$inferInsert;
 
 export type Highlight = typeof highlights.$inferSelect;
 export type NewHighlight = typeof highlights.$inferInsert;
@@ -283,6 +348,8 @@ export const schema = {
   videos,
   shots,
   storylines,
+  storylineSegments,
+  projectAnalysis,
   highlights,
   recapTasks,
   recapSegments,
