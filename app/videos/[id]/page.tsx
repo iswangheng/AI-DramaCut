@@ -50,6 +50,8 @@ interface VideoDetail {
   height: number;
   fps: number;
   status: string;
+  episodeNumber?: number | null;
+  displayTitle?: string | null;
 }
 
 function VideoDetailContent({ videoId }: { videoId: string }) {
@@ -296,7 +298,27 @@ function VideoDetailContent({ videoId }: { videoId: string }) {
 
           <div className="flex items-start justify-between">
             <div>
-              <h1 className="text-3xl font-bold mb-2">{video.filename}</h1>
+              {/* 集数标签 */}
+              {video.episodeNumber && (
+                <div className="mb-3">
+                  <Badge variant="outline" className="text-sm px-3 py-1">
+                    第 {video.episodeNumber} 集
+                  </Badge>
+                </div>
+              )}
+
+              {/* 显示标题：优先使用 displayTitle，否则使用 filename */}
+              <h1 className="text-3xl font-bold mb-2">
+                {video.displayTitle || video.filename}
+              </h1>
+
+              {/* 显示原始文件名（如果 displayTitle 被使用） */}
+              {video.displayTitle && video.displayTitle !== video.filename && (
+                <p className="text-sm text-muted-foreground mb-2">
+                  文件名：{video.filename}
+                </p>
+              )}
+
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Clock className="w-4 h-4" />

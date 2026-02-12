@@ -181,7 +181,7 @@ function ProjectsContent() {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">素材管理</h1>
+            <h1 className="text-3xl font-bold text-foreground mb-2">项目管理</h1>
             <p className="text-base text-muted-foreground">管理你的短剧项目素材，查看预处理进度</p>
           </div>
           <Button variant="outline" onClick={loadProjects} disabled={loading}>

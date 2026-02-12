@@ -67,6 +67,13 @@ export interface DetectHighlightsJobData {
   videoId: number;
 }
 
+export interface AnalyzeProjectStorylinesJobData {
+  type: 'analyze-project-storylines';
+  projectId: number;
+  videoIds: number[];
+  totalVideos: number;
+}
+
 export type VideoJobData =
   | TrimJobData
   | AnalyzeJobData
@@ -74,7 +81,8 @@ export type VideoJobData =
   | RenderJobData
   | TTSJobData
   | ExtractStorylinesJobData
-  | DetectHighlightsJobData;
+  | DetectHighlightsJobData
+  | AnalyzeProjectStorylinesJobData;
 
 // 深度解说渲染任务类型（单独定义，避免导入 Remotion）
 export interface RecapRenderJobData {
@@ -543,14 +551,26 @@ async function processExtractStorylinesJob(job: Job<ExtractStorylinesJobData>) {
 
   const storylines = response.data;
 
-  // 保存故事线到数据库
+  // TODO: 此 worker 使用旧的 storylines schema（videoId + shotIds）
+  // 新的 schema 中 storylines 属于项目层级（projectId）
+  // 此 worker 可能已经过时，被项目级分析（analyze-project-storylines）替代
+
+  // 为了兼容性，使用 video 的 projectId
+  const video = await queries.video.getById(videoId);
+
+  if (!video) {
+    throw new Error(`视频 ${videoId} 不存在`);
+  }
+
+  // 保存故事线到数据库（使用新的 schema）
   const storylinesData = storylines.map((storyline: any) => ({
-    videoId,
+    projectId: video.projectId,  // 使用 projectId 而不是 videoId
     name: storyline.name,
     description: storyline.description,
     attractionScore: storyline.attractionScore,
-    shotIds: JSON.stringify([]), // 暂时为空，后续可以关联镜头
-    category: 'other' as const,
+    episodeCount: 1,  // 单视频分析，默认 1 集
+    totalDurationMs: video.durationMs,  // 使用视频时长
+    category: storyline.category || 'other',
   }));
 
   await queries.storyline.createMany(storylinesData);
@@ -655,6 +675,337 @@ async function processDetectHighlightsJob(job: Job<DetectHighlightsJobData>) {
     success: true,
     videoId,
     highlightCount: highlights.length,
+  };
+}
+
+/**
+ * 项目级故事线分析处理器（异步任务）
+ */
+async function processAnalyzeProjectStorylinesJob(job: Job<AnalyzeProjectStorylinesJobData>) {
+  const { projectId, videoIds, totalVideos } = job.data;
+
+  console.log(`🎬 [项目分析] 开始分析项目 ${projectId}，共 ${totalVideos} 集视频`);
+
+  // 导入数据库和 Gemini 客户端
+  const { db } = await import('../db/client');
+  const { eq, asc, desc } = await import('drizzle-orm');
+  const schema = await import('../db/schema');
+  const { GeminiClient } = await import('../api/gemini');
+  const { join } = await import('path');
+  const { extractKeyframes } = await import('../video/keyframes');
+
+  const geminiClient = new GeminiClient();
+
+  // 获取项目的所有视频（按集数排序）
+  const videos = await db
+    .select()
+    .from(schema.videos)
+    .where(eq(schema.videos.projectId, projectId))
+    .orderBy(asc(schema.videos.sortOrder));
+
+  if (videos.length === 0) {
+    throw new Error('该项目没有视频');
+  }
+
+  // ============================================
+  // 第一部分：逐个分析视频（关键帧 + 增强摘要 + 镜头 + 高光）
+  // ============================================
+
+  const shotAnalysisResults = [];
+  const highlightAnalysisResults = [];
+  const keyframesResults = new Map<number, string[]>();  // videoId -> keyframe paths
+
+  for (let i = 0; i < videos.length; i++) {
+    const video = videos[i];
+    const episodeNum = video.episodeNumber!;
+    const videoPath = join(process.cwd(), video.filePath);
+
+    console.log(`\n📹 [${i + 1}/${videos.length}] 分析第 ${episodeNum} 集: ${video.filename}`);
+
+    // 更新进度
+    const progress = Math.round((i / videos.length) * 50); // 前 50% 用于镜头和高光分析
+    await job.updateProgress(progress);
+    // 同时更新数据库
+    await queries.queueJob.updateProgress(job.id!, progress);
+    wsServer.sendProgress(job.id!, progress, `正在分析第 ${episodeNum} 集...`);
+
+    // ========================================
+    // 1.0 增量分析检查（跳过已分析的视频）
+    // ========================================
+    const existingShots = await queries.shot.getByVideoId(video.id);
+    const existingHighlights = await queries.highlight.getByVideoId(video.id);
+
+    if (existingShots.length > 0 && existingHighlights.length > 0 && video.enhancedSummary) {
+      console.log(`  ✅ 跳过已分析的第 ${episodeNum} 集（已有 ${existingShots.length} 个镜头，${existingHighlights.length} 个高光）`);
+
+      // 如果已提取关键帧，加载路径；否则提取
+      if (video.keyframesExtracted === 1) {
+        // TODO: 从数据库或文件系统加载已有关键帧路径
+        console.log(`  ✅ 关键帧已存在`);
+      } else {
+        // 提取关键帧（即使已分析，也补充提取关键帧）
+        console.log(`  📸 提取关键帧（每 3 秒一帧）...`);
+        const keyframesResult = await extractKeyframes({
+          videoPath,
+          outputDir: join(process.cwd(), 'public', 'keyframes', video.id.toString()),
+          intervalSeconds: 3,  // 每 3 秒一帧
+          filenamePrefix: `video_${video.id}_keyframe`
+        });
+
+        keyframesResults.set(video.id, keyframesResult.framePaths);
+        console.log(`  ✅ 提取了 ${keyframesResult.framePaths.length} 个关键帧`);
+
+        // 标记关键帧已提取
+        await db
+          .update(schema.videos)
+          .set({ keyframesExtracted: 1 })
+          .where(eq(schema.videos.id, video.id));
+      }
+
+      shotAnalysisResults.push({
+        videoId: video.id,
+        episodeNumber: episodeNum,
+        shotCount: existingShots.length,
+      });
+
+      highlightAnalysisResults.push({
+        videoId: video.id,
+        episodeNumber: episodeNum,
+        highlightCount: existingHighlights.length,
+      });
+
+      continue;
+    }
+
+    // ========================================
+    // 1.1 提取关键帧（每 3 秒一帧，用于跨集分析）
+    // ========================================
+    console.log(`  📸 提取关键帧（每 3 秒一帧）...`);
+    const keyframesResult = await extractKeyframes({
+      videoPath,
+      outputDir: join(process.cwd(), 'public', 'keyframes', video.id.toString()),
+      intervalSeconds: 3,  // 每 3 秒一帧
+      filenamePrefix: `video_${video.id}_keyframe`
+    });
+
+    keyframesResults.set(video.id, keyframesResult.framePaths);
+    console.log(`  ✅ 提取了 ${keyframesResult.framePaths.length} 个关键帧`);
+
+    // ========================================
+    // 1.2 视频分析（包含增强摘要）
+    // ========================================
+    console.log(`  🎬 镜头分析中...`);
+    const analyzeResult = await geminiClient.analyzeVideo(videoPath);
+
+    if (analyzeResult.success && analyzeResult.data) {
+      const analysis = analyzeResult.data;
+
+      // 保存增强摘要到数据库
+      if (analysis.enhancedSummary) {
+        await db
+          .update(schema.videos)
+          .set({
+            enhancedSummary: JSON.stringify(analysis.enhancedSummary),
+            keyframesExtracted: 1
+          })
+          .where(eq(schema.videos.id, video.id));
+        console.log(`  ✅ 保存了增强摘要`);
+      }
+
+      // 保存镜头到数据库
+      if (analysis.scenes && analysis.scenes.length > 0) {
+        const shotsData = analysis.scenes.map((scene: any) => ({
+          videoId: video.id,
+          startMs: scene.startMs,
+          endMs: scene.endMs,
+          description: scene.description,
+          emotion: scene.emotion,
+          dialogue: scene.dialogue || '',
+          characters: scene.characters ? JSON.stringify(scene.characters) : null,
+          viralScore: scene.viralScore || 0,
+          startFrame: Math.floor((scene.startMs / 1000) * 30),
+          endFrame: Math.floor((scene.endMs / 1000) * 30),
+        }));
+
+        await queries.shot.createMany(shotsData);
+        console.log(`  ✅ 保存了 ${shotsData.length} 个镜头`);
+
+        shotAnalysisResults.push({
+          videoId: video.id,
+          episodeNumber: episodeNum,
+          shotCount: shotsData.length,
+        });
+      }
+    }
+
+    // ========================================
+    // 1.3 高光检测
+    // ========================================
+    console.log(`  ✨ 高光检测中...`);
+
+    // 确保 analyzeResult.data 存在，否则使用默认值
+    const analysisData = analyzeResult.data || {
+      summary: '',
+      scenes: [],
+      storylines: [],
+      viralScore: 0,
+      highlights: [],
+      durationMs: video.durationMs
+    };
+
+    const highlightsResult = await geminiClient.findHighlights(videoPath, analysisData, 50);
+
+    if (highlightsResult.success && highlightsResult.data) {
+      const highlights = highlightsResult.data;
+
+      // 保存高光到数据库
+      const highlightsData = highlights.map((highlight: any) => {
+        const timestampMs = highlight.timestampMs || 0;
+        return {
+          videoId: video.id,
+          startMs: timestampMs,
+          endMs: timestampMs + ((highlight.suggestedDuration || 60) * 1000),
+          reason: highlight.reason || highlight.description || '高光时刻',
+          viralScore: highlight.viralScore || 7.0,
+          category: highlight.category || 'other',
+        };
+      });
+
+      await queries.highlight.createMany(highlightsData);
+      console.log(`  ✅ 保存了 ${highlightsData.length} 个高光时刻`);
+
+      highlightAnalysisResults.push({
+        videoId: video.id,
+        episodeNumber: episodeNum,
+        highlightCount: highlightsData.length,
+      });
+    }
+  }
+
+  console.log(`\n✅ [关键帧提取] 完成，共提取 ${keyframesResults.size} 个视频的关键帧`);
+  console.log(`✅ [镜头分析] 完成，共分析 ${shotAnalysisResults.reduce((sum, r) => sum + r.shotCount, 0)} 个镜头`);
+  console.log(`✅ [高光检测] 完成，共检测 ${highlightAnalysisResults.reduce((sum, r) => sum + r.highlightCount, 0)} 个高光时刻`);
+
+  // ============================================
+  // 第二部分：项目级故事线分析（使用增强摘要和关键帧）
+  // ============================================
+
+  console.log(`\n🌟 [项目分析] 开始项目级故事线分析（使用增强摘要和关键帧）...`);
+
+  await job.updateProgress(60);
+  await queries.queueJob.updateProgress(job.id!, 60);
+  wsServer.sendProgress(job.id!, 60, '正在分析跨集故事线（使用增强连贯性信息）...');
+
+  // 构建增强摘要映射
+  const enhancedSummaries = new Map<number, import('../api/gemini').EnhancedSummary>();
+  for (const video of videos) {
+    if (video.enhancedSummary) {
+      try {
+        const parsed = JSON.parse(video.enhancedSummary);
+        enhancedSummaries.set(video.id, parsed);
+      } catch (error) {
+        console.warn(`  ⚠️ 视频 ${video.id} 的增强摘要解析失败`);
+      }
+    }
+  }
+
+  console.log(`  📊 已加载 ${enhancedSummaries.size} 个视频的增强摘要`);
+
+  // 调用项目级分析（传入增强摘要和关键帧）
+  const projectStorylinesResult = await geminiClient.analyzeProjectStorylines(
+    videos,
+    enhancedSummaries,
+    keyframesResults
+  );
+
+  if (!projectStorylinesResult.success || !projectStorylinesResult.data) {
+    throw new Error(projectStorylinesResult.error || "项目级故事线分析失败");
+  }
+
+  const projectStorylines = projectStorylinesResult.data;
+
+  console.log(`✅ [项目分析] 识别到 ${projectStorylines.storylines.length} 条跨集故事线`);
+
+  // 3. 存储项目级分析结果到 project_analysis 表
+  await queries.projectAnalysis.upsert({
+    projectId,
+    mainPlot: projectStorylines.mainPlot,
+    subplotCount: projectStorylines.subplotCount || 0,
+    characterRelationships: JSON.stringify(projectStorylines.characterRelationships || {}),
+    foreshadowings: JSON.stringify(projectStorylines.foreshadowings || []),
+    crossEpisodeHighlights: JSON.stringify(projectStorylines.crossEpisodeHighlights || []),
+    analyzedAt: new Date(),
+  });
+
+  // 4. 存储 storylines 到数据库
+  const createdStorylines = [];
+
+  for (const storyline of projectStorylines.storylines) {
+    const [created] = await db
+      .insert(schema.storylines)
+      .values({
+        projectId,
+        name: storyline.name,
+        description: storyline.description,
+        attractionScore: storyline.attractionScore,
+        episodeCount: storyline.segments.length,
+        totalDurationMs: storyline.segments.reduce((sum: number, seg: any) => sum + (seg.endMs - seg.startMs), 0),
+        category: storyline.category,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+
+    // 5. 存储 storyline segments
+    const segments = storyline.segments.map((seg: any, index: number) => ({
+      storylineId: created.id,
+      videoId: seg.videoId,
+      startMs: seg.startMs,
+      endMs: seg.endMs,
+      segmentOrder: index + 1,
+      description: seg.description,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+
+    await queries.storylineSegment.createMany(segments);
+
+    createdStorylines.push({
+      ...created,
+      segments,
+    });
+  }
+
+  console.log(`✅ [项目分析] 成功存储 ${createdStorylines.length} 条跨集故事线`);
+
+  // 更新进度: 100%
+  await job.updateProgress(100);
+  await queries.queueJob.updateProgress(job.id!, 100);
+  wsServer.sendComplete(job.id!, {
+    projectId,
+    message: '项目级分析完成',
+  });
+
+  return {
+    success: true,
+    projectId,
+    shotAnalysis: {
+      totalVideos: videos.length,
+      results: shotAnalysisResults,
+    },
+    highlightAnalysis: {
+      totalVideos: videos.length,
+      totalHighlights: highlightAnalysisResults.reduce((sum, r) => sum + r.highlightCount, 0),
+      results: highlightAnalysisResults,
+    },
+    storylineAnalysis: {
+      mainPlot: projectStorylines.mainPlot,
+      storylineCount: createdStorylines.length,
+      storylines: createdStorylines,
+      characterRelationships: projectStorylines.characterRelationships,
+      foreshadowings: projectStorylines.foreshadowings,
+      crossEpisodeHighlights: projectStorylines.crossEpisodeHighlights,
+    },
   };
 }
 
@@ -776,6 +1127,10 @@ export async function videoJobProcessor(job: Job<VideoJobData>) {
         result = await processDetectHighlightsJob(job as Job<DetectHighlightsJobData>);
         break;
 
+      case 'analyze-project-storylines':
+        result = await processAnalyzeProjectStorylinesJob(job as Job<AnalyzeProjectStorylinesJobData>);
+        break;
+
       case 'render':
         result = await processRenderJob(job as Job<RenderJobData>);
         break;
@@ -808,6 +1163,7 @@ export const processors = {
   processExtractShotsJob,
   processExtractStorylinesJob,
   processDetectHighlightsJob,
+  processAnalyzeProjectStorylinesJob,
   processRenderJob,
   processTTSJob,
   // processRecapRenderJob - 不在这里导出，避免导入 Remotion

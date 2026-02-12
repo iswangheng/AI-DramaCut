@@ -6,3 +6,4 @@
 export * from './metadata';
 export * from './shot-detection';
 export * from './sampling';
+export * from './keyframes';

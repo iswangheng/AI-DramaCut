@@ -5,8 +5,8 @@
 
 import { db } from './client';
 import * as schema from './schema';
-import { eq, desc, and, sql, like } from 'drizzle-orm';
-import type { Project, Video, Shot, Storyline, Highlight, RecapTask, RecapSegment } from './schema';
+import { eq, desc, and, sql, like, asc } from 'drizzle-orm';
+import type { Project, Video, Shot, Storyline, StorylineSegment, ProjectAnalysis, Highlight, RecapTask, RecapSegment } from './schema';
 
 // ============================================
 // 项目相关查询 (projects)
@@ -309,15 +309,56 @@ export const storylineQueries = {
   },
 
   /**
-   * 根据视频 ID 获取所有故事线
+   * 根据项目 ID 获取所有故事线（新增：storylines 现在属于项目）
    */
-  async getByVideoId(videoId: number) {
+  async getByProjectId(projectId: number) {
     const storylines = await db
       .select()
       .from(schema.storylines)
-      .where(eq(schema.storylines.videoId, videoId))
+      .where(eq(schema.storylines.projectId, projectId))
       .orderBy(desc(schema.storylines.attractionScore));
     return storylines;
+  },
+
+  /**
+   * 根据视频 ID 获取所有故事线（保留兼容性，现在会查询该项目下的所有 storylines）
+   * @deprecated 建议使用 getByProjectId
+   */
+  async getByVideoId(videoId: number) {
+    // 通过 video 找到 projectId，然后查询该项目的所有 storylines
+    const [video] = await db
+      .select({ projectId: schema.videos.projectId })
+      .from(schema.videos)
+      .where(eq(schema.videos.id, videoId));
+
+    if (!video) return [];
+
+    return this.getByProjectId(video.projectId);
+  },
+
+  /**
+   * 根据项目 ID 获取故事线及其片段（包含 segments）
+   */
+  async getWithSegments(projectId: number) {
+    const storylines = await this.getByProjectId(projectId);
+
+    // 为每个 storyline 加载它的 segments
+    const result = await Promise.all(
+      storylines.map(async (storyline: any) => {
+        const segments = await db
+          .select()
+          .from(schema.storylineSegments)
+          .where(eq(schema.storylineSegments.storylineId, storyline.id))
+          .orderBy(asc(schema.storylineSegments.segmentOrder));
+
+        return {
+          ...storyline,
+          segments,
+        };
+      })
+    );
+
+    return result;
   },
 
   /**
@@ -333,6 +374,128 @@ export const storylineQueries = {
       .where(eq(schema.storylines.id, id))
       .returning();
     return storyline;
+  },
+};
+
+// ============================================
+// 故事线片段相关查询 (storyline_segments) - 新增
+// ============================================
+
+export const storylineSegmentQueries = {
+  /**
+   * 创建故事线片段
+   */
+  async create(data: typeof schema.storylineSegments.$inferInsert) {
+    const [segment] = await db.insert(schema.storylineSegments).values(data).returning();
+    return segment;
+  },
+
+  /**
+   * 批量创建故事线片段
+   */
+  async createMany(data: typeof schema.storylineSegments.$inferInsert[]) {
+    const segments = await db.insert(schema.storylineSegments).values(data).returning();
+    return segments;
+  },
+
+  /**
+   * 根据 ID 获取片段
+   */
+  async getById(id: number) {
+    const [segment] = await db
+      .select()
+      .from(schema.storylineSegments)
+      .where(eq(schema.storylineSegments.id, id));
+    return segment;
+  },
+
+  /**
+   * 根据 storyline ID 获取所有片段
+   */
+  async getByStorylineId(storylineId: number) {
+    const segments = await db
+      .select()
+      .from(schema.storylineSegments)
+      .where(eq(schema.storylineSegments.storylineId, storylineId))
+      .orderBy(asc(schema.storylineSegments.segmentOrder));
+    return segments;
+  },
+
+  /**
+   * 根据 storyline ID 删除所有片段
+   */
+  async deleteByStorylineId(storylineId: number) {
+    const segments = await db
+      .delete(schema.storylineSegments)
+      .where(eq(schema.storylineSegments.storylineId, storylineId))
+      .returning();
+    return segments;
+  },
+};
+
+// ============================================
+// 项目级分析相关查询 (project_analysis) - 新增
+// ============================================
+
+export const projectAnalysisQueries = {
+  /**
+   * 创建或更新项目分析
+   */
+  async upsert(data: typeof schema.projectAnalysis.$inferInsert) {
+    const existing = await db
+      .select()
+      .from(schema.projectAnalysis)
+      .where(eq(schema.projectAnalysis.projectId, data.projectId));
+
+    if (existing.length > 0) {
+      // 更新
+      const [analysis] = await db
+        .update(schema.projectAnalysis)
+        .set({
+          ...data,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.projectAnalysis.projectId, data.projectId))
+        .returning();
+      return analysis;
+    } else {
+      // 创建
+      const [analysis] = await db.insert(schema.projectAnalysis).values(data).returning();
+      return analysis;
+    }
+  },
+
+  /**
+   * 根据 ID 获取项目分析
+   */
+  async getById(id: number) {
+    const [analysis] = await db
+      .select()
+      .from(schema.projectAnalysis)
+      .where(eq(schema.projectAnalysis.id, id));
+    return analysis;
+  },
+
+  /**
+   * 根据项目 ID 获取分析结果
+   */
+  async getByProjectId(projectId: number) {
+    const [analysis] = await db
+      .select()
+      .from(schema.projectAnalysis)
+      .where(eq(schema.projectAnalysis.projectId, projectId));
+    return analysis;
+  },
+
+  /**
+   * 删除项目分析
+   */
+  async delete(projectId: number) {
+    const [analysis] = await db
+      .delete(schema.projectAnalysis)
+      .where(eq(schema.projectAnalysis.projectId, projectId))
+      .returning();
+    return analysis;
   },
 };
 
@@ -611,6 +774,21 @@ export const queueJobQueries = {
       .returning();
     return job;
   },
+
+  /**
+   * 更新任务进度
+   */
+  async updateProgress(jobId: string, progress: number) {
+    const [job] = await db
+      .update(schema.queueJobs)
+      .set({
+        progress,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.queueJobs.jobId, jobId))
+      .returning();
+    return job;
+  },
 };
 
 // ============================================
@@ -677,6 +855,8 @@ export const queries = {
   video: videoQueries,
   shot: shotQueries,
   storyline: storylineQueries,
+  storylineSegment: storylineSegmentQueries,
+  projectAnalysis: projectAnalysisQueries,
   highlight: highlightQueries,
   recapTask: recapTaskQueries,
   recapSegment: recapSegmentQueries,

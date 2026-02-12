@@ -68,7 +68,9 @@ export const videos = sqliteTable('videos', {
   sortOrder: integer('sort_order').notNull().default(0),  // 排序顺序
 
   // AI 分析结果
-  summary: text('summary'),                                // 剧情梗概
+  summary: text('summary'),                                // 剧情梗概（旧版，50字以内）
+  enhancedSummary: text('enhanced_summary'),               // 增强剧情梗概（JSON 格式，包含连贯性信息）
+  keyframesExtracted: integer('keyframes_extracted').notNull().default(0),  // 是否已提取关键帧（0=否，1=是）
   viralScore: real('viral_score'),                         // 爆款分数 (0-10)
 
   // 错误信息

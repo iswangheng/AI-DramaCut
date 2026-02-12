@@ -102,6 +102,8 @@ class DatabaseClient {
       'recap_segments',
       'recap_tasks',
       'highlights',
+      'storyline_segments',
+      'project_analysis',
       'storylines',
       'shots',
       'queue_jobs',
@@ -163,6 +165,9 @@ class DatabaseClient {
         height INTEGER NOT NULL,
         fps INTEGER NOT NULL,
         status TEXT NOT NULL DEFAULT 'uploading',
+        episode_number INTEGER,
+        display_title TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
         summary TEXT,
         viral_score REAL,
         error_message TEXT,
@@ -197,12 +202,45 @@ class DatabaseClient {
     sqlite.exec(`
       CREATE TABLE IF NOT EXISTS storylines (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
         name TEXT NOT NULL,
         description TEXT NOT NULL,
         attraction_score REAL NOT NULL,
-        shot_ids TEXT NOT NULL,
+        episode_count INTEGER NOT NULL DEFAULT 1,
+        total_duration_ms INTEGER,
         category TEXT NOT NULL DEFAULT 'other',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+
+    // 创建 storyline_segments 表
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS storyline_segments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        storyline_id INTEGER NOT NULL REFERENCES storylines(id) ON DELETE CASCADE,
+        video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+        start_ms INTEGER NOT NULL,
+        end_ms INTEGER NOT NULL,
+        segment_order INTEGER NOT NULL,
+        description TEXT NOT NULL,
+        shot_ids TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+
+    // 创建 project_analysis 表
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS project_analysis (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        main_plot TEXT,
+        subplot_count INTEGER DEFAULT 0,
+        character_relationships TEXT,
+        foreshadowings TEXT,
+        cross_episode_highlights TEXT,
+        analyzed_at INTEGER,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
@@ -287,10 +325,14 @@ class DatabaseClient {
     sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status)`);
     sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_videos_project_id ON videos(project_id)`);
     sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status)`);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_videos_episode_number ON videos(episode_number)`);
     sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_shots_video_id ON shots(video_id)`);
     sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_highlights_video_id ON highlights(video_id)`);
     sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_highlights_is_confirmed ON highlights(is_confirmed)`);
-    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_storylines_video_id ON storylines(video_id)`);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_storylines_project_id ON storylines(project_id)`);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_storyline_segments_storyline_id ON storyline_segments(storyline_id)`);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_storyline_segments_video_id ON storyline_segments(video_id)`);
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_project_analysis_project_id ON project_analysis(project_id)`);
     sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_recap_tasks_storyline_id ON recap_tasks(storyline_id)`);
     sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_recap_segments_task_id ON recap_segments(task_id)`);
     sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_queue_jobs_job_id ON queue_jobs(job_id)`);

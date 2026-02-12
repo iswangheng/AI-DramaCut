@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { MainLayout } from "@/components/main-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,10 +16,10 @@ import {
   RefreshCw,
   Trash2,
   Play,
-  Pause,
   FileVideo,
   Mic,
   Workflow,
+  Loader2,
 } from "lucide-react";
 
 // 任务类型定义
@@ -28,7 +29,7 @@ interface QueueJob {
   queueName: string;
   jobType: string;
   payload: string;
-  status: "waiting" | "active" | "completed" | "failed" | "delayed";
+  status: "waiting" | "active" | "completed" | "failed" | "delayed" | "retried";
   result?: string;
   error?: string;
   progress?: number;
@@ -174,29 +175,60 @@ function formatDuration(ms: number): string {
 }
 
 function TasksContent() {
-  const [jobs, setJobs] = useState<QueueJob[]>(mockJobs);
+  const router = useRouter();
+  const [jobs, setJobs] = useState<QueueJob[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("all");
 
-  // 模拟实时进度更新
+  // 加载任务列表
+  const loadJobs = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/tasks');
+      const data = await response.json();
+
+      if (data.success) {
+        setJobs(data.data || []);
+      } else {
+        console.error('加载任务失败:', data.error);
+      }
+    } catch (error) {
+      console.error('加载任务错误:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 初始加载
+  useEffect(() => {
+    loadJobs();
+  }, []);
+
+  // 定时刷新（每 5 秒）
   useEffect(() => {
     const interval = setInterval(() => {
-      setJobs((prevJobs) =>
-        prevJobs.map((job) => {
-          if (job.status === "active" && (job as any).progress < 100) {
-            return {
-              ...job,
-              progress: Math.min(((job as any).progress || 0) + 5, 100),
-              status: ((job as any).progress || 0) + 5 >= 100 ? "completed" : "active",
-              updatedAt: new Date(),
-            } as QueueJob & { progress: number };
-          }
-          return job;
-        })
-      );
-    }, 2000);
+      loadJobs();
+    }, 5000);
 
     return () => clearInterval(interval);
   }, []);
+
+  // 重试任务（仅针对渲染任务）
+  const handleRetry = async (taskId: number) => {
+    if (!confirm('确定要重试这个渲染任务吗？')) return;
+
+    try {
+      // TODO: 实现渲染任务重试逻辑
+      // 1. 从 payload 解析任务类型（render-highlight 或 recap-render）
+      // 2. 重新调用渲染 API
+      // 3. 更新原任务状态为 retried
+
+      alert('重试功能待实现，请重新创建渲染任务');
+    } catch (error) {
+      console.error('重试任务错误:', error);
+      alert('重试任务失败');
+    }
+  };
 
   // 根据标签过滤任务
   const filteredJobs = jobs.filter((job) => {
@@ -218,11 +250,21 @@ function TasksContent() {
   return (
     <div className="p-10 animate-fade-in">
       {/* 页面标题 */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground mb-2">任务管理</h1>
-        <p className="text-base text-muted-foreground">
-          查看所有渲染任务进度和历史记录
-        </p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground mb-2">任务管理</h1>
+          <p className="text-base text-muted-foreground">
+            查看所有渲染任务进度和历史记录
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={loadJobs}
+          className="cursor-pointer"
+        >
+          <RefreshCw className="w-4 h-4 mr-2" />
+          刷新
+        </Button>
       </div>
 
       {/* 统计卡片 */}
@@ -286,7 +328,14 @@ function TasksContent() {
         </TabsList>
 
         <TabsContent value={activeTab} className="space-y-3">
-          {filteredJobs.length === 0 ? (
+          {loading ? (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground">加载任务中...</p>
+              </CardContent>
+            </Card>
+          ) : filteredJobs.length === 0 ? (
             <Card>
               <CardContent className="p-12 text-center">
                 <div className="text-5xl mb-4">📋</div>
@@ -355,6 +404,7 @@ function TasksContent() {
                             variant="outline"
                             size="sm"
                             onClick={() => console.log("取消任务:", job.jobId)}
+                            className="cursor-pointer"
                           >
                             <Trash2 className="w-4 h-4 mr-2" />
                             取消
@@ -364,14 +414,19 @@ function TasksContent() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => console.log("重试任务:", job.jobId)}
+                            onClick={() => handleRetry(job.id)}
+                            className="cursor-pointer border-blue-200 text-blue-700 hover:bg-blue-50"
                           >
                             <RefreshCw className="w-4 h-4 mr-2" />
                             重试
                           </Button>
                         )}
                         {job.status === "completed" && (
-                          <Button size="sm" onClick={() => console.log("下载任务:", job.jobId)}>
+                          <Button
+                            size="sm"
+                            onClick={() => console.log("下载任务:", job.jobId)}
+                            className="cursor-pointer"
+                          >
                             <Play className="w-4 h-4 mr-2" />
                             下载
                           </Button>
@@ -383,7 +438,9 @@ function TasksContent() {
                     {job.status === "active" || job.status === "waiting" ? (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">渲染进度</span>
+                          <span className="text-muted-foreground">
+                            {job.status === "waiting" ? "等待中" : "执行进度"}
+                          </span>
                           <span className="font-semibold text-foreground">{progress}%</span>
                         </div>
                         <Progress value={progress} className="h-2" />
@@ -391,6 +448,10 @@ function TasksContent() {
                     ) : job.status === "failed" && job.error ? (
                       <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
                         <p className="text-sm text-red-700">{job.error}</p>
+                      </div>
+                    ) : job.status === "completed" && job.result ? (
+                      <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <p className="text-sm text-green-700">✓ 任务完成</p>
                       </div>
                     ) : null}
                   </CardContent>

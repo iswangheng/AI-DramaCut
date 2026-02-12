@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Upload, X, Film, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { uploadVideos } from "@/lib/upload/video";
+import { parseEpisodeNumber, generateDisplayTitle } from "@/lib/utils/episode-parser";
 
 interface UploadVideoDialogProps {
   projectId?: number;
@@ -84,6 +85,21 @@ export function UploadVideoDialog({ projectId, onUploadComplete }: UploadVideoDi
           const result = successResults[i];
           if (result.data) {
             try {
+              // 自动解析集数
+              const episodeNumber = parseEpisodeNumber(result.data.filename);
+              const displayTitle = episodeNumber
+                ? generateDisplayTitle(episodeNumber, result.data.filename)
+                : null;
+
+              // 计算排序顺序：如果有集数则使用集数，否则使用文件名
+              let sortOrder = 0;
+              if (episodeNumber) {
+                sortOrder = episodeNumber;
+              } else {
+                // 没有集数时，使用当前时间戳作为排序顺序
+                sortOrder = Date.now();
+              }
+
               const response = await fetch(`/api/projects/${projectId}/videos`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -95,6 +111,10 @@ export function UploadVideoDialog({ projectId, onUploadComplete }: UploadVideoDi
                   width: result.data.width,
                   height: result.data.height,
                   fps: result.data.fps,
+                  // 自动解析的集数信息
+                  episodeNumber: episodeNumber,
+                  displayTitle: displayTitle,
+                  sortOrder: sortOrder,
                 }),
               });
               const data = await response.json();
@@ -202,6 +222,12 @@ export function UploadVideoDialog({ projectId, onUploadComplete }: UploadVideoDi
               </p>
               {uploadedFiles.map((file, index) => {
                 const result = uploadResults[index];
+                // 自动解析集数用于显示
+                const episodeNumber = parseEpisodeNumber(file.name);
+                const displayTitle = episodeNumber
+                  ? generateDisplayTitle(episodeNumber, file.name)
+                  : file.name;
+
                 return (
                   <div
                     key={index}
@@ -210,11 +236,23 @@ export function UploadVideoDialog({ projectId, onUploadComplete }: UploadVideoDi
                     <Film className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground truncate">
-                        {file.name}
+                        {displayTitle}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatFileSize(file.size)}
-                      </p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{formatFileSize(file.size)}</span>
+                        {episodeNumber && (
+                          <>
+                            <span>·</span>
+                            <span className="text-primary font-medium">第{episodeNumber}集</span>
+                          </>
+                        )}
+                      </div>
+                      {/* 显示原始文件名 */}
+                      {displayTitle !== file.name && (
+                        <p className="text-xs text-muted-foreground truncate">
+                          原文件名：{file.name}
+                        </p>
+                      )}
                     </div>
                     {result && (
                       <div className="flex-shrink-0">

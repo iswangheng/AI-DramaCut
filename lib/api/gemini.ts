@@ -51,10 +51,48 @@ export interface Scene {
 }
 
 /**
+ * 增强剧情摘要（用于跨集连贯性分析）
+ */
+export interface EnhancedSummary {
+  /** 开头状态 */
+  openingState: {
+    connectionToPrevious: string;    // 与上一集的连接（如：承接上集结尾的XX场景）
+    initialSituation: string;        // 初始情境（如：角色A在某地，准备做XX）
+    charactersStatus: string[];      // 角色状态列表（如：["主角A：愤怒", "配角B：悲伤"]）
+  };
+  /** 核心事件 */
+  coreEvents: Array<{
+    timestampMs: number;             // 事件发生时间（毫秒）
+    description: string;             // 事件描述
+    importance: 'high' | 'medium' | 'low';  // 重要性等级
+  }>;
+  /** 结尾状态 */
+  endingState: {
+    cliffhanger: string;             // 悬念/钩子（如：角色C突然说出"我是你的父亲"）
+    foreshadowing: string[];         // 伏笔列表（如：["暗示XX是关键证人", "埋下XX线索"]）
+    unresolved: string[];            // 未解决的问题（如：["XX的真实身份", "XX物品的去向"]）
+  };
+  /** 角色弧光 */
+  characterArcs: Array<{
+    characterName: string;           // 角色名称
+    emotionStart: string;            // 起始情绪
+    emotionEnd: string;              // 结束情绪
+    change: string;                  // 变化描述（如：从愤怒转为悲伤）
+  }>;
+  /** 关键元素 */
+  keyElements: {
+    props: string[];                 // 重要道具/物品（如：["血书", "信件", "匕首"]）
+    locations: string[];             // 重要场景（如：["废弃工厂", "医院天台"]）
+    symbols: string[];               // 象征/隐喻（如：["红玫瑰象征爱情", "暴雨象征危机"]）
+  };
+}
+
+/**
  * 视频分析结果
  */
 export interface VideoAnalysis {
-  summary: string; // 一句话剧情梗概
+  summary: string; // 一句话剧情梗概（旧版，50字以内）
+  enhancedSummary?: EnhancedSummary; // 增强剧情梗概（JSON 格式，包含连贯性信息）
   scenes: Scene[];
   storylines: string[]; // 故事线列表
   viralScore: number; // 整体爆款分数 (0-10)
@@ -95,6 +133,88 @@ export interface Storyline {
   description: string;
   scenes: Scene[];
   attractionScore: number;
+}
+
+/**
+ * 项目级故事线片段
+ * 用于深度解说模式，表示跨集的故事线片段
+ */
+export interface StorylineSegment {
+  videoId: number;
+  startMs: number;
+  endMs: number;
+  description: string;
+}
+
+/**
+ * 项目级故事线
+ * 跨越多个集数的完整故事弧线
+ */
+export interface ProjectStoryline {
+  name: string;
+  description: string;
+  attractionScore: number;
+  category: 'revenge' | 'romance' | 'identity' | 'mystery' | 'power' | 'family' | 'suspense' | 'other';
+  segments: StorylineSegment[];
+}
+
+/**
+ * 人物关系图谱
+ * 记录每个角色在不同集数中的状态和关系
+ */
+export interface CharacterRelationships {
+  [episodeNumber: string]: {
+    [characterName: string]: string[];
+  };
+}
+
+/**
+ * 伏笔设置与揭晓
+ */
+export interface Foreshadowing {
+  set_up: string;      // "ep1-15:00" 表示第1集15秒处
+  payoff: string;      // "ep5-10:00" 表示第5集10秒处
+  description: string; // "骨血灯秘密"
+}
+
+/**
+ * 跨集高光候选
+ * 跨越多集的精彩片段
+ */
+export interface CrossEpisodeHighlight {
+  start_ep: number;
+  start_ms: number;
+  end_ep: number;
+  end_ms: number;
+  description: string;
+}
+
+/**
+ * 项目级故事线分析结果
+ */
+export interface ProjectStorylines {
+  mainPlot: string;                                   // 主线剧情梗概
+  subplotCount: number;                               // 支线数量
+  characterRelationships: CharacterRelationships;      // 人物关系变化
+  foreshadowings: Foreshadowing[];                    // 伏笔设置与揭晓
+  crossEpisodeHighlights: CrossEpisodeHighlight[];    // 跨集高光
+  storylines: ProjectStoryline[];                     // 主要故事线（3-5条）
+}
+
+/**
+ * 视频对象（从数据库查询）
+ */
+export interface Video {
+  id: number;
+  projectId: number;
+  filename: string;
+  filePath: string;
+  durationMs: number;
+  episodeNumber?: number | null;
+  displayTitle?: string | null;
+  sortOrder: number;
+  summary?: string | null;
+  viralScore?: number | null;
 }
 
 /**
@@ -781,6 +901,38 @@ ${audioAnalysis ? `**音频分析结果**（已单独分析）：\n${audioAnalys
 \`\`\`json
 {
   "summary": "一句话剧情梗概（50字以内）",
+  "enhancedSummary": {
+    "openingState": {
+      "connectionToPrevious": "与上一集的连接（如：承接上集结尾的XX场景）",
+      "initialSituation": "初始情境（如：角色A在某地，准备做XX）",
+      "charactersStatus": ["主角A：愤怒", "配角B：悲伤"]
+    },
+    "coreEvents": [
+      {
+        "timestampMs": 15000,
+        "description": "事件描述（如：角色A与角色B发生争执）",
+        "importance": "high"
+      }
+    ],
+    "endingState": {
+      "cliffhanger": "悬念/钩子（如：角色C突然说出惊人真相）",
+      "foreshadowing": ["伏笔1", "伏笔2"],
+      "unresolved": ["未解决问题1", "未解决问题2"]
+    },
+    "characterArcs": [
+      {
+        "characterName": "角色A",
+        "emotionStart": "愤怒",
+        "emotionEnd": "悲伤",
+        "change": "从愤怒转为悲伤，因为得知真相"
+      }
+    ],
+    "keyElements": {
+      "props": ["重要道具1", "重要道具2"],
+      "locations": ["场景1", "场景2"],
+      "symbols": ["象征1", "象征2"]
+    }
+  },
   "scenes": [
     {
       "startMs": 12340,
@@ -803,6 +955,14 @@ ${audioAnalysis ? `**音频分析结果**（已单独分析）：\n${audioAnalys
   "durationMs": 120000
 }
 \`\`\`
+
+**注意**：
+1. summary 保持简短（50字以内），用于快速浏览
+2. enhancedSummary 必须详细，用于跨集连贯性分析和深度解说模式
+3. coreEvents 按 timestampMs 排序，记录剧情转折点
+4. endingState 的 cliffhanger 对于短剧非常重要（下集预告的钩子）
+5. characterArcs 记录角色情感变化轨迹
+6. keyElements 中的 symbols 会用于深度解说的语义搜索
 
 ${sampleFrames && sampleFrames.length > 100 ? `注意：由于提供了高密度的关键帧采样（${sampleFrames.length} 帧），请仔细分析帧与帧之间的连贯性和变化，准确捕捉每个镜头的起止时间。` : ''}`;
 
@@ -857,11 +1017,11 @@ ${sampleFrames && sampleFrames.length > 100 ? `注意：由于提供了高密度
 
 参考信息（帮助你理解视频内容）：
 **视频时长**: ${Math.floor((analysis.durationMs || 0) / 1000)} 秒
-**剧情梗概**: ${analysis.summary}
-**故事线**: ${analysis.storylines.join('、')}
+**剧情梗概**: ${analysis.summary || '暂无'}
+${analysis.storylines ? `**故事线**: ${analysis.storylines.join('、')}` : ''}
 
 **初步场景分析**（仅供参考，请以实际视频为准）:
-${analysis.scenes.slice(0, 10).map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)} - ${this.formatTime(s.endMs)}] ${s.description} (${s.emotion}, 爆款分数: ${s.viralScore}/10)`).join('\n')}
+${analysis.scenes?.slice(0, 10).map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)} - ${this.formatTime(s.endMs)}] ${s.description} (${s.emotion}, 爆款分数: ${s.viralScore}/10)`).join('\n') || '暂无场景分析'}
 
 请返回以下 JSON 格式：
 \`\`\`json
@@ -887,7 +1047,10 @@ ${analysis.scenes.slice(0, 10).map((s, i) => `${i + 1}. [${this.formatTime(s.sta
     const response = await this.analyzeVideoWithUpload(videoPath, prompt, systemInstruction);
 
     if (!response.success || !response.data) {
-      return response as GeminiResponse<HighlightMoment[]>;
+      return {
+        success: false,
+        error: response.error || 'Failed to analyze video',
+      } as GeminiResponse<HighlightMoment[]>;
     }
 
     const parsed = this.parseJsonResponse<{ highlights: HighlightMoment[] }>(response.data as string);
@@ -1278,6 +1441,274 @@ ${analysis.scenes.map((s, i) => `${i + 1}. [${this.formatTime(s.startMs)}] ${s.d
     return {
       ...response,
       data: parsed.scripts,
+    };
+  }
+
+  /**
+   * 项目级全局分析（模式 B - 深度解说模式）
+   *
+   * 分析整个项目的所有集数，识别跨集的完整故事线
+   * 这是实现连贯性分析的核心功能
+   *
+   * @param videos 视频对象数组（必须按集数排序，包含 episodeNumber 和 summary）
+   * @param enhancedSummaries 增强摘要映射（videoId -> EnhancedSummary）
+   * @param keyframesMap 关键帧路径映射（videoId -> keyframe paths）
+   * @returns ProjectStorylines 项目级故事线分析结果
+   */
+  async analyzeProjectStorylines(
+    videos: Video[],
+    enhancedSummaries?: Map<number, EnhancedSummary>,
+    keyframesMap?: Map<number, string[]>
+  ): Promise<GeminiResponse<ProjectStorylines>> {
+    if (videos.length === 0) {
+      return {
+        success: false,
+        error: '没有提供视频数据',
+      };
+    }
+
+    // 验证所有视频都有集数信息
+    const videosWithoutEpisode = videos.filter(v => !v.episodeNumber);
+    if (videosWithoutEpisode.length > 0) {
+      return {
+        success: false,
+        error: `${videosWithoutEpisode.length} 个视频缺少集数信息，无法进行项目级分析`,
+      };
+    }
+
+    const systemInstruction = `你是一位资深的电视剧编剧和故事架构师。
+你的任务是分析一部连续剧的完整项目，识别跨越多集的主要故事线和人物关系变化。
+
+你需要从整体角度理解剧情，而不是单集分析。${keyframesMap && keyframesMap.size > 0 ? '\n\n你可以使用提供的关键帧（16帧/集）来验证跨集的视觉连贯性，确保人物服装、场景、道具在不同集数中的一致性。' : ''}`;
+
+    // 构建增强剧集列表信息
+    const episodeList = videos
+      .sort((a, b) => (a.episodeNumber || 0) - (b.episodeNumber || 0))
+      .map((v, index) => {
+        const epNum = v.episodeNumber || index + 1;
+        const summary = v.summary || '（暂无剧情梗概）';
+        const durationMin = Math.floor(v.durationMs / 60000);
+        let episodeInfo = `第${epNum}集：《${v.displayTitle || v.filename}》（${durationMin}分钟）\n剧情梗概：${summary}`;
+
+        // 如果有增强摘要，添加连贯性信息
+        if (enhancedSummaries && enhancedSummaries.has(v.id)) {
+          const enhanced = enhancedSummaries.get(v.id)!;
+
+          // 添加开头状态
+          if (enhanced.openingState) {
+            episodeInfo += `\n  📍 开头状态：${enhanced.openingState.initialSituation}`;
+            if (enhanced.openingState.connectionToPrevious) {
+              episodeInfo += `\n  🔗 连接上集：${enhanced.openingState.connectionToPrevious}`;
+            }
+          }
+
+          // 添加核心事件（只显示 high 重要性）
+          if (enhanced.coreEvents && enhanced.coreEvents.length > 0) {
+            const highImportanceEvents = enhanced.coreEvents.filter(e => e.importance === 'high');
+            if (highImportanceEvents.length > 0) {
+              episodeInfo += `\n  🎬 关键事件：`;
+              highImportanceEvents.forEach(e => {
+                const timeSec = Math.floor(e.timestampMs / 1000);
+                episodeInfo += `\n     - ${timeSec}秒: ${e.description}`;
+              });
+            }
+          }
+
+          // 添加结尾悬念
+          if (enhanced.endingState && enhanced.endingState.cliffhanger) {
+            episodeInfo += `\n  🎭 结尾悬念：${enhanced.endingState.cliffhanger}`;
+          }
+
+          // 添加角色弧光
+          if (enhanced.characterArcs && enhanced.characterArcs.length > 0) {
+            episodeInfo += `\n  👥 角色变化：`;
+            enhanced.characterArcs.forEach(arc => {
+              episodeInfo += `\n     - ${arc.characterName}: ${arc.emotionStart} → ${arc.emotionEnd} (${arc.change})`;
+            });
+          }
+        }
+
+        // 如果有关键帧，标注数量
+        if (keyframesMap && keyframesMap.has(v.id)) {
+          const keyframes = keyframesMap.get(v.id)!;
+          episodeInfo += `\n  📸 关键帧：已提供 ${keyframes.length} 帧用于视觉连贯性验证`;
+        }
+
+        return episodeInfo;
+      })
+      .join('\n\n---\n\n');
+
+    const prompt = `我有一部包含 ${videos.length} 集的连续剧项目，请进行项目级全局分析。
+
+**剧集列表**：
+${episodeList}
+
+**分析任务**：
+1. **主线剧情**：总结整个项目的主线剧情（100字以内）
+2. **支线数量**：识别有多少条支线剧情
+3. **人物关系**：分析主要角色在不同集数中的状态和关系变化
+4. **伏笔设置**：识别伏笔的设置和揭晓（如：第1集15秒设置的骨血灯秘密，在第5集10秒揭晓）
+5. **跨集高光**：找出跨越多集的精彩片段（如：从昏迷到逃生的完整情节，跨越第1集结尾到第2集开头）
+6. **主要故事线**：提取3-5条最重要的故事线（如：复仇线、爱情线、身份谜团线），每条故事线跨越多个集数
+
+请返回以下 JSON 格式：
+\`\`\`json
+{
+  "mainPlot": "整个项目的主线剧情梗概（100字以内）",
+  "subplotCount": 3,
+  "characterRelationships": {
+    "ep1": {
+      "婉清": ["受欺负", "隐忍"],
+      "男主": ["冷漠", "误会"]
+    },
+    "ep3": {
+      "婉清": ["觉醒", "反击"],
+      "男主": ["震惊", "愧疚"]
+    },
+    "ep5": {
+      "婉清": ["成功复仇"],
+      "男主": ["真心悔改"]
+    }
+  },
+  "foreshadowings": [
+    {
+      "set_up": "ep1-15:00",
+      "payoff": "ep5-10:00",
+      "description": "骨血灯秘密：婉清身世之谜"
+    },
+    {
+      "set_up": "ep2-20:00",
+      "payoff": "ep8-05:00",
+      "description": "男主的真实身份"
+    }
+  ],
+  "crossEpisodeHighlights": [
+    {
+      "start_ep": 1,
+      "start_ms": 85000,
+      "end_ep": 2,
+      "end_ms": 15000,
+      "description": "从昏迷到逃生的完整情节（跨越第1集结尾到第2集开头）"
+    }
+  ],
+  "storylines": [
+    {
+      "name": "复仇线",
+      "description": "女主婉清从受辱到成功复仇的完整历程",
+      "attractionScore": 9.5,
+      "category": "revenge",
+      "segments": [
+        {
+          "videoId": 1,
+          "startMs": 10000,
+          "endMs": 25000,
+          "description": "婉清受辱，发誓复仇"
+        },
+        {
+          "videoId": 3,
+          "startMs": 50000,
+          "endMs": 70000,
+          "description": "婉清觉醒，开始反击"
+        },
+        {
+          "videoId": 5,
+          "startMs": 80000,
+          "endMs": 95000,
+          "description": "成功复仇，大仇得报"
+        }
+      ]
+    },
+    {
+      "name": "爱情线",
+      "description": "男主从冷漠误见到真心悔改的情感转变",
+      "attractionScore": 8.5,
+      "category": "romance",
+      "segments": [
+        {
+          "videoId": 1,
+          "startMs": 30000,
+          "endMs": 45000,
+          "description": "初次相遇，冷漠对待"
+        },
+        {
+          "videoId": 4,
+          "startMs": 60000,
+          "endMs": 75000,
+          "description": "逐渐了解，心生好感"
+        },
+        {
+          "videoId": 6,
+          "startMs": 40000,
+          "endMs": 55000,
+          "description": "真心悔改，挽回爱情"
+        }
+      ]
+    },
+    {
+      "name": "身份谜团线",
+      "description": "婉清身世之谜的揭开过程",
+      "attractionScore": 8.8,
+      "category": "mystery",
+      "segments": [
+        {
+          "videoId": 1,
+          "startMs": 15000,
+          "endMs": 20000,
+          "description": "骨血灯秘密的伏笔"
+        },
+        {
+          "videoId": 3,
+          "startMs": 30000,
+          "endMs": 40000,
+          "description": "发现线索，开始调查"
+        },
+        {
+          "videoId": 5,
+          "startMs": 10000,
+          "endMs": 25000,
+          "description": "身世真相大白"
+        }
+      ]
+    }
+  ]
+}
+\`\`\`
+
+**重要说明**：
+1. **videoId** 必须使用实际的数据库视频 ID（${videos.map(v => v.id).join(', ')}）
+2. **集数引用** 使用 "epN" 格式（如 ep1, ep2, ep3）
+3. **时间戳** 使用集数-秒数格式（如 ep1-15:00 表示第1集15秒处）
+4. **category** 选项：revenge（复仇）、romance（爱情）、identity（身份）、mystery（谜团）、power（权力）、family（家庭）、suspense（悬疑）、other（其他）
+5. **segments** 中的每个片段都必须真实存在于对应的视频中
+6. **时间估算**：如果不知道精确时间戳，可以根据集数估算（如第1集25分钟的视频，15:00 表示中间位置）
+7. **故事线质量**：只提取最重要的3-5条故事线，每条线跨越2-5集，有明确的起承转合`;
+
+    console.log(`🎬 [项目分析] 开始分析 ${videos.length} 集视频的跨集故事线`);
+
+    const response = await this.callApi(prompt, systemInstruction);
+
+    if (!response.success || !response.data) {
+      return response as GeminiResponse<ProjectStorylines>;
+    }
+
+    const parsed = this.parseJsonResponse<ProjectStorylines>(response.data as string);
+
+    if (!parsed) {
+      return {
+        success: false,
+        error: 'Failed to parse project storylines response',
+      };
+    }
+
+    console.log(`✅ [项目分析] 识别到 ${parsed.storylines.length} 条跨集故事线`);
+    console.log(`   - 主线剧情：${parsed.mainPlot}`);
+    console.log(`   - 支线数量：${parsed.subplotCount}`);
+    console.log(`   - 伏笔数量：${parsed.foreshadowings.length}`);
+    console.log(`   - 跨集高光：${parsed.crossEpisodeHighlights.length}`);
+
+    return {
+      ...response,
+      data: parsed,
     };
   }
 

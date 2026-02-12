@@ -9,13 +9,14 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { UploadVideoDialog } from "@/components/upload-video-dialog";
 import { EditProjectDialog } from "@/components/edit-project-dialog";
+import { EditVideoDialog } from "@/components/edit-video-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ArrowLeft, Upload, MoreVertical, Trash2, Eye, Edit } from "lucide-react";
+import { ArrowLeft, Upload, MoreVertical, Trash2, Eye, Edit, TreeDeciduous, Loader2, BarChart3 } from "lucide-react";
 import type { Video } from "@/lib/db/schema";
 
 interface Project {
@@ -38,6 +39,8 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeProgress, setAnalyzeProgress] = useState(0);
 
   // 查看视频详情
   const handleViewVideo = (videoId: number) => {
@@ -145,6 +148,48 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
     setEditDialogOpen(true);
   };
 
+  // 分析项目故事线
+  const handleAnalyzeStorylines = async () => {
+    if (!project) return;
+
+    // 检查是否所有视频都有集数
+    const videosWithoutEpisode = videos.filter(v => !v.episodeNumber);
+    if (videosWithoutEpisode.length > 0) {
+      alert(`以下视频缺少集数信息，无法进行项目级分析：\n${videosWithoutEpisode.map(v => v.filename).join('\n')}\n\n请先为这些视频设置集数。`);
+      return;
+    }
+
+    if (videos.length < 2) {
+      alert('至少需要 2 个视频才能进行项目级故事线分析。');
+      return;
+    }
+
+    setAnalyzing(true);
+
+    try {
+      // 调用分析 API（异步任务）
+      const response = await fetch(`/api/projects/${project.id}/analyze-storylines`, {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        const { jobId, resultsUrl } = data.data;
+
+        // 立即重定向到结果页面，带上 jobId
+        router.push(`${resultsUrl}?jobId=${jobId}`);
+      } else {
+        alert(data.error || '启动分析任务失败');
+        setAnalyzing(false);
+      }
+    } catch (err) {
+      console.error('启动分析任务失败:', err);
+      alert(err instanceof Error ? err.message : '启动分析任务失败');
+      setAnalyzing(false);
+    }
+  };
+
   const handleUploadVideos = async (files: File[]) => {
     if (!project) return;
 
@@ -226,9 +271,34 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
       </div>
 
       {/* 操作按钮 */}
-      <div className="mb-6 flex gap-3">
+      <div className="mb-6 flex gap-3 flex-wrap">
         <UploadVideoDialog projectId={project.id} onUploadComplete={loadData} />
-        <Button variant="outline">查看剧情树</Button>
+        <Button
+          variant="outline"
+          onClick={handleAnalyzeStorylines}
+          disabled={analyzing || videos.length < 2}
+          className="gap-2 cursor-pointer"
+        >
+          {analyzing ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              分析中...
+            </>
+          ) : (
+            <>
+              <TreeDeciduous className="w-4 h-4" />
+              分析故事线
+            </>
+          )}
+        </Button>
+        <Button
+          variant="default"
+          onClick={() => router.push(`/projects/${project.id}/storylines`)}
+          className="gap-2 cursor-pointer"
+        >
+          <BarChart3 className="w-4 h-4" />
+          查看分析结果
+        </Button>
       </div>
 
       {/* 视频列表 */}
@@ -250,16 +320,32 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
+                      {/* 显示标题：优先使用 displayTitle，否则使用 filename */}
                       <h3 className="text-lg font-semibold text-foreground mb-1">
-                        {video.filename}
+                        {video.displayTitle || video.filename}
                       </h3>
                       <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                        {/* 集数标签 */}
+                        {video.episodeNumber && (
+                          <>
+                            <Badge variant="outline" className="text-xs">
+                              第{video.episodeNumber}集
+                            </Badge>
+                            <span>·</span>
+                          </>
+                        )}
                         <span>{formatDuration(video.durationMs)}</span>
                         <span>·</span>
                         <span>{formatFileSize(video.fileSize)}</span>
                         <span>·</span>
                         <span>{getStatusBadge(video.status)}</span>
                       </div>
+                      {/* 原始文件名（如果显示标题被使用） */}
+                      {video.displayTitle && video.displayTitle !== video.filename && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          文件名：{video.filename}
+                        </p>
+                      )}
                     </div>
 
                     {/* 操作菜单 */}
@@ -275,7 +361,10 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
                           查看详情
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => handleEditVideo(video)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditVideo(video);
+                          }}
                         >
                           <Edit className="w-4 h-4 mr-2" />
                           编辑
@@ -326,6 +415,14 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
           <UploadVideoDialog projectId={project.id} onUploadComplete={loadData} />
         </div>
       )}
+
+      {/* 编辑视频对话框 */}
+      <EditVideoDialog
+        video={editingVideo}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSuccess={loadData}
+      />
     </div>
   );
 }

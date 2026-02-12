@@ -6,7 +6,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { queries } from '@/lib/db';
-import { queueManager, QUEUE_NAMES } from '@/lib/queue/bullmq';
 
 /**
  * GET /api/projects/:id/videos
@@ -120,6 +119,8 @@ export async function POST(
     }
 
     // 创建视频记录
+    // 状态设置为 ready，等待项目级分析
+    // 不再自动触发单个视频的分析任务
     const video = await queries.video.create({
       projectId,
       filename,
@@ -129,68 +130,21 @@ export async function POST(
       width,
       height,
       fps,
-      status: 'uploading',
+      status: 'ready', // 直接设为 ready，等待项目级分析
+      episodeNumber: body.episodeNumber || null,
+      displayTitle: body.displayTitle || null,
+      sortOrder: body.sortOrder || 0,
     });
 
-    // ============================================
-    // 自动化处理流程：触发任务队列
-    // ============================================
-
-    try {
-      console.log(`🚀 开始自动化处理流程: Video ID ${video.id}`);
-
-      // 1. 触发 Gemini 分析任务（深度理解 - 包含关键帧采样）
-      // 注意：这个任务会自动完成镜头检测、分析，并保存详细的镜头信息
-      await queueManager.addJob(
-        QUEUE_NAMES.geminiAnalysis,
-        'analyze',
-        {
-          type: 'analyze',
-          videoPath: filePath,
-          videoId: video.id,
-        }
-      );
-
-      console.log(`✅ Gemini 分析任务已加入队列: Video ID ${video.id}`);
-
-      // 2. 触发故事线提取任务（在分析完成后）
-      await queueManager.addJob(
-        QUEUE_NAMES.geminiAnalysis,
-        'extract-storylines',
-        {
-          type: 'extract-storylines',
-          videoPath: filePath,
-          videoId: video.id,
-        }
-      );
-
-      console.log(`✅ 故事线提取任务已加入队列: Video ID ${video.id}`);
-
-      // 3. 触发高光检测任务（在分析完成后）
-      await queueManager.addJob(
-        QUEUE_NAMES.geminiAnalysis,
-        'detect-highlights',
-        {
-          type: 'detect-highlights',
-          videoPath: filePath,
-          videoId: video.id,
-        }
-      );
-
-      console.log(`✅ 高光检测任务已加入队列: Video ID ${video.id}`);
-
-    } catch (queueError) {
-      // 如果任务队列添加失败，记录错误但不影响上传
-      console.error('❌ 添加任务到队列失败:', queueError);
-
-      // 更新视频状态为错误
-      await queries.video.updateStatus(video.id!, 'error');
-    }
+    console.log(`✅ 视频上传成功: Video ID ${video.id}`);
+    console.log(`📝 文件名: ${filename}`);
+    console.log(`🔢 集数: ${body.episodeNumber || '未识别'}`);
+    console.log(`📊 排序: ${body.sortOrder || 0}`);
 
     return NextResponse.json({
       success: true,
       data: video,
-      message: '视频上传成功，正在后台处理...',
+      message: '视频上传成功，等待项目级分析',
     }, { status: 201 });
   } catch (error) {
     return NextResponse.json(

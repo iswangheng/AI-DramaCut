@@ -13,7 +13,7 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { id: "projects", label: "素材管理", icon: <FolderOpen className="w-5 h-5" />, section: "work", path: "/projects" },
+  { id: "projects", label: "项目管理", icon: <FolderOpen className="w-5 h-5" />, section: "work", path: "/projects" },
   { id: "highlight", label: "高光切片模式", icon: <Scissors className="w-5 h-5" />, section: "work", path: "/highlight" },
   { id: "recap", label: "深度解说模式", icon: <Mic className="w-5 h-5" />, section: "work", path: "/recap" },
   { id: "tasks", label: "任务管理", icon: <ListTodo className="w-5 h-5" />, section: "system", path: "/tasks" },

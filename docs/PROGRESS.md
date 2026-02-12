@@ -3,16 +3,16 @@
 > **唯一的官方项目进度文档**
 > 所有进度更新、完成状态、待办事项统一记录在此文档中
 
-**更新时间**: 2025-02-09
-**当前版本**: v0.7.1
-**项目状态**: 高光切片模式完成，添加视频片段播放功能
+**更新时间**: 2025-02-10
+**当前版本**: v0.8.0
+**项目状态**: 项目级连贯性分析完成，集数管理功能上线
 
 ---
 
 ## 📊 总体进度
 
 ```
-████████████████████████████████  90%
+████████████████████████████████  95%
 ```
 
 ### 核心模块完成度
@@ -30,6 +30,135 @@
 ---
 
 ## 📅 更新日志
+
+### 2025-02-10 - 项目级连贯性分析 + 集数管理功能
+
+#### ✅ 完成事项
+
+- ✅ **项目级全局分析功能**（核心功能）
+  - 数据库架构升级：
+    - `videos` 表添加 `episodeNumber`, `displayTitle`, `sortOrder` 字段
+    - `storylines` 表从 `video_id` 改为 `project_id`（支持跨集故事线）
+    - 新增 `storylineSegments` 表（存储故事线片段）
+    - 新增 `projectAnalysis` 表（存储项目级全局分析结果）
+  - SQL 迁移脚本执行成功，数据结构完整
+
+- ✅ **集数解析工具**（`lib/utils/episode-parser.ts`）
+  - `parseEpisodeNumber()` - 智能解析集数（支持 ep01, 第1集, 01, 001, E01 等）
+  - `generateDisplayTitle()` - 生成显示标题（如：第1集：骨血灯）
+  - `sortFilesByEpisode()` - 按集数排序
+  - `validateConsecutive()` - 检查集数是否连续
+  - `detectMissingEpisodes()` - 检测缺失的集数
+
+- ✅ **数据库查询层更新**（`lib/db/queries.ts`）
+  - 新增 `storylineSegmentQueries` 模块（CRUD 操作）
+  - 新增 `projectAnalysisQueries` 模块（upsert, getById, getByProjectId）
+  - 更新 `storylineQueries` 支持项目级查询（`getByProjectId`, `getWithSegments`）
+  - 向后兼容 `getByVideoId`（自动查找所属项目）
+
+- ✅ **项目级分析 API**（`/api/projects/[id]/analyze-storylines`）
+  - POST 接口，分析整个项目的所有集数
+  - 验证所有视频都有集数信息
+  - 调用 Gemini 进行全局分析
+  - 存储分析结果到 `project_analysis` 表
+  - 创建 `storylines` 和 `storylineSegments` 记录
+  - 返回完整的分析结果（主线、人物关系、伏笔、跨集高光、故事线）
+
+- ✅ **Gemini 客户端扩展**（`lib/api/gemini.ts`）
+  - 新增类型定义：
+    - `ProjectStoryline` - 项目级故事线
+    - `StorylineSegment` - 故事线片段
+    - `CharacterRelationships` - 人物关系图谱
+    - `Foreshadowing` - 伏笔设置与揭晓
+    - `CrossEpisodeHighlight` - 跨集高光
+    - `ProjectStorylines` - 完整分析结果
+  - 新增方法 `analyzeProjectStorylines()`：
+    - 分析整个项目的所有集数
+    - 识别跨越多集的主要故事线
+    - 追踪人物关系变化
+    - 检测伏笔设置和揭晓
+    - 找出跨集高光片段
+    - 提取 3-5 条主要故事线（复仇、爱情、身份谜团等）
+
+- ✅ **上传界面增强**（`components/upload-video-dialog.tsx`）
+  - 上传时自动解析集数（使用 `parseEpisodeNumber()`）
+  - 自动生成显示标题（使用 `generateDisplayTitle()`）
+  - 文件列表显示解析的集数信息
+  - 显示原始文件名（当 displayTitle 被使用时）
+  - 自动计算排序顺序（有集数用集数，否则用时间戳）
+
+- ✅ **项目详情页面增强**（`app/projects/[id]/page.tsx`）
+  - 视频列表显示集数标签（Badge）
+  - 优先显示 `displayTitle`，否则显示 `filename`
+  - 显示原始文件名（当 displayTitle 被使用时）
+  - 添加"编辑"菜单项（调用编辑对话框）
+
+- ✅ **编辑视频对话框**（`components/edit-video-dialog.tsx` - 新建）
+  - 编辑集数（episodeNumber）
+  - 编辑显示标题（displayTitle）
+  - 编辑排序顺序（sortOrder）
+  - 显示原始文件名（只读）
+  - 完整的表单验证和错误处理
+
+- ✅ **视频更新 API**（`/api/videos/[id]` PATCH 方法）
+  - 支持更新 `episodeNumber`, `displayTitle`, `sortOrder`
+  - 部分更新（只更新提供的字段）
+  - 自动更新 `updatedAt` 时间戳
+  - 完整的错误处理
+
+#### 🎯 技术亮点
+
+- **架构升级**：从单集分析升级为项目级全局分析，理解跨集的连贯性
+- **智能解析**：自动识别多种文件名格式（ep01, 第1集, 01, 001, E01）
+- **跨集故事线**：支持提取跨越多集的完整故事弧（如：复仇线从第1集到第5集）
+- **人物关系追踪**：记录主要角色在不同集数中的状态和关系变化
+- **伏笔检测**：自动识别伏笔的设置和揭晓（如：第1集15秒设置的骨血灯秘密，在第5集10秒揭晓）
+- **向后兼容**：保留单集分析功能，同时支持项目级分析
+
+#### 📦 变更文件
+
+**数据库 Schema**：
+- `lib/db/schema.ts` - 添加 episodeNumber, displayTitle, sortOrder 到 videos 表；重构 storylines 表；新增 storylineSegments, projectAnalysis 表
+
+**新增文件**：
+- `lib/utils/episode-parser.ts` - 集数解析工具（194行）
+- `components/edit-video-dialog.tsx` - 编辑视频对话框（148行）
+- `app/api/projects/[id]/analyze-storylines/route.ts` - 项目级分析 API（161行）
+
+**修改文件**：
+- `lib/db/queries.ts` - 添加新查询模块（storylineSegments, projectAnalysis）
+- `lib/api/gemini.ts` - 添加 ProjectStorylines 类型定义和 `analyzeProjectStorylines()` 方法（+220 行）
+- `app/projects/[id]/page.tsx` - 显示集数信息，集成编辑功能（+40 行）
+- `components/upload-video-dialog.tsx` - 自动解析集数（+50 行）
+- `app/api/videos/[id]/route.ts` - 添加 PATCH 方法支持视频信息更新（+82 行）
+
+**数据库迁移**：
+- 执行 SQL 迁移脚本：
+  - 添加 episodeNumber, displayTitle, sortOrder 字段到 videos 表
+  - 删除并重建 storylines 表（video_id → project_id）
+  - 创建 storyline_segments 表
+  - 创建 project_analysis 表
+  - 更新 recap_tasks 和 recap_segments 的外键约束
+
+#### 📊 完成状态
+- ✅ 数据库架构升级：100% 完成
+- ✅ 项目级全局分析：100% 可用
+- ✅ 集数管理功能：100% 可用
+- ✅ 向后兼容性：完整保留
+
+#### 🎯 功能演示流程
+1. 上传视频 → 自动识别集数（如：ep01.mp4 → 第1集）
+2. 查看项目详情 → 显示集数标签
+3. 点击"编辑" → 修改集数或显示标题
+4. 点击"分析故事线" → Gemini 分析整个项目
+5. 查看分析结果：
+   - 主线剧情梗概
+   - 3-5 条跨集故事线（复仇、爱情、身份谜团等）
+   - 人物关系变化（每集的状态）
+   - 伏笔设置与揭晓
+   - 跨集高光片段
+
+---
 
 ### 2026-02-09 - 高光切片模式前端集成 + Gemini 安全策略修复
 

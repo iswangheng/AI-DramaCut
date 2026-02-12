@@ -32,7 +32,7 @@ export async function GET(
       .limit(10);
 
     // 过滤出与该视频相关的任务（从 payload 中提取 videoId）
-    const videoJobs = jobs.filter(job => {
+    const videoJobs = jobs.filter((job: any) => {
       try {
         const payload = JSON.parse(job.payload);
         return payload.videoId === videoId;
