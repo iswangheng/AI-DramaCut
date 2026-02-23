@@ -1,5 +1,5 @@
 /**
- * DramaGen AI - Agent 间接口契约
+ * DramaCut AI - Agent 间接口契约
  *
  * 本文件定义所有 Agent 必须遵守的接口约定
  * 修改前请先与其他 Agent 确认

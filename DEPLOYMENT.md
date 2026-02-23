@@ -1,6 +1,6 @@
-# DramaGen AI - 部署文档
+# DramaCut AI - 部署文档
 
-本文档提供 DramaGen AI 项目的完整部署指南，包括云服务器环境配置、自动化部署流程和运维管理。
+本文档提供 DramaCut AI 项目的完整部署指南，包括云服务器环境配置、自动化部署流程和运维管理。
 
 ---
 
@@ -213,7 +213,7 @@ ls -la .data/local.db
 ```bash
 #!/bin/bash
 
-# DramaGen AI 自动部署脚本
+# DramaCut AI 自动部署脚本
 # 使用方法: ./deploy.sh [环境]
 # 示例: ./deploy.sh production
 

@@ -1,4 +1,4 @@
-# 🎬 DramaGen AI 测试指南
+# 🎬 DramaCut AI 测试指南
 
 本文档介绍如何测试项目管理和视频上传功能。
 
@@ -144,7 +144,7 @@ tail -f logs/worker.log
 
 **预期日志输出**:
 ```
-🚀 启动 DramaGen AI 队列 Workers...
+🚀 启动 DramaCut AI 队列 Workers...
 ✅ 视频处理 Worker 已启动: video-processing
 ✅ Gemini 分析 Worker 已启动: gemini-analysis
 ...

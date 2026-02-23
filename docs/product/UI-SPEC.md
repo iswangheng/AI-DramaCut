@@ -1,4 +1,4 @@
-# DramaGen AI UI 设计与交互规范
+# DramaCut AI UI 设计与交互规范
 
 ## 1. 视觉风格 (Visual Identity)
 - **主题**: 极简浅色 (Minimalist Light)，背景色 `#F8FAFC` (Slate-50)。

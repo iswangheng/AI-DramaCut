@@ -671,7 +671,7 @@ rm -rf .next node_modules/.cache
 
 # 项目概述
 
-DramaGen AI 是一款面向短剧/漫剧剪辑师、投放运营及自媒体博主的智能化视频生产工具。系统深度集成 Gemini 3 的多模态理解能力，实现从原始长视频到高点击短视频的自动化/半自动化产出。
+DramaCut AI 是一款面向短剧/漫剧剪辑师、投放运营及自媒体博主的智能化视频生产工具。系统深度集成 Gemini 3 的多模态理解能力，实现从原始长视频到高点击短视频的自动化/半自动化产出。
 
 **当前状态**: **素材管理模块 100% 完成**（2025-02-08）
 
@@ -817,9 +817,9 @@ git push                # 推送到 GitHub
 
 ### 产品与技术文档
 - `config.md` - 核心配置和功能需求
-- `DramaGen AI 产品需求文档 (PRD).md` - 完整产品需求和验收标准
-- `DramaGen AI 技术架构方案.md` - 详细技术架构
-- `DramaGen AI UI 设计与交互规范.md` - UI/UX 规范
+- `DramaCut AI 产品需求文档 (PRD).md` - 完整产品需求和验收标准
+- `DramaCut AI 技术架构方案.md` - 详细技术架构
+- `DramaCut AI UI 设计与交互规范.md` - UI/UX 规范
 - `技术方案：毫秒级精度与并发处理.md` - 毫秒级精度和并发处理实现细节
 - `prompts.md` - Gemini 3 视频 AI 提示词
 

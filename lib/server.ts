@@ -1,5 +1,5 @@
 // ============================================
-// DramaGen AI 自定义服务器
+// DramaCut AI 自定义服务器
 // 集成 Next.js + WebSocket
 // Agent 4 - 服务器集成
 // ============================================
@@ -44,7 +44,7 @@ const handle = app.getRequestHandler();
 
 app.prepare().then(async () => {
   // 1. 初始化应用（数据库、配置等）
-  console.log('🚀 正在初始化 DramaGen AI...');
+  console.log('🚀 正在初始化 DramaCut AI...');
   await initializeApp();
 
   // 2. 创建 HTTP 服务器
@@ -97,7 +97,7 @@ app.prepare().then(async () => {
     .listen(port, () => {
       console.log('');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log(`🎬 DramaGen AI 服务器已启动`);
+      console.log(`🎬 DramaCut AI 服务器已启动`);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log(`📍 本地: http://localhost:${port}`);
       console.log(`🔌 WebSocket: ws://localhost:${port}`);

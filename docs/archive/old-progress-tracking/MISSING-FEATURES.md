@@ -1,7 +1,7 @@
-# DramaGen AI 功能实现状态
+# DramaCut AI 功能实现状态
 
 **更新时间**: 2026-02-08
-**项目**: DramaGen AI - 智能视频生产工具
+**项目**: DramaCut AI - 智能视频生产工具
 
 ---
 
@@ -276,13 +276,13 @@
 
 ## 📚 相关文档
 
-- [产品需求文档 (PRD)](./DramaGen AI 产品需求文档 (PRD).md)
-- [技术架构方案](./DramaGen AI 技术架构方案.md)
-- [UI 设计规范](./DramaGen AI UI 设计与交互规范.md)
+- [产品需求文档 (PRD)](./DramaCut AI 产品需求文档 (PRD).md)
+- [技术架构方案](./DramaCut AI 技术架构方案.md)
+- [UI 设计规范](./DramaCut AI UI 设计与交互规范.md)
 - [技术方案：毫秒级精度](./技术方案：毫秒级精度与并发处理.md)
 - [Gemini Prompts](./prompts.md)
 
 ---
 
 **最后更新**: 2026-02-08
-**维护者**: DramaGen AI Team
+**维护者**: DramaCut AI Team

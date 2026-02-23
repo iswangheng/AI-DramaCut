@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "DramaGen AI - 智能视频生产工具",
+  title: "DramaCut AI - 智能视频生产工具",
   description: "自动化短视频生产工具，支持高光智能切片和深度解说矩阵",
 };
 

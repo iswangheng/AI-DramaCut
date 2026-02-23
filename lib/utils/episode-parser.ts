@@ -62,8 +62,8 @@ export function parseEpisodeNumber(filename: string): number | null {
   }
 
   // 规则4：纯数字文件名（不含扩展名）
-  // 例: "01"（解析为 01.mp4 后变成 "01"）
-  const pureNumberPattern = /^(\d{2,3})\.[^.]+$/;
+  // 例: "1.mp4", "01.mp4", "001.mp4"
+  const pureNumberPattern = /^(\d{1,3})\.[^.]+$/;
   const match3 = filename.match(pureNumberPattern);
   if (match3) {
     const num = parseInt(match3[1], 10);

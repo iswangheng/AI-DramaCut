@@ -206,7 +206,7 @@ import { writeFileSync } from 'fs';
 async function textToSpeechExample() {
   // 生成语音
   const result = await elevenlabsClient.textToSpeech({
-    text: '你好，这是一个测试。我是 DramaGen AI 的语音助手。',
+    text: '你好，这是一个测试。我是 DramaCut AI 的语音助手。',
     voiceId: 'EXAVITQu4vr4xnSDxMaL', // Sarah 语音
     modelId: 'eleven_multilingual_v2',
     outputFormat: 'mp3_44100_128',

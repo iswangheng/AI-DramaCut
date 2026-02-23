@@ -197,7 +197,7 @@ async function testElevenLabsTTS(elevenlabsClient: any): Promise<TestResult> {
 // 主测试流程
 // ============================================
 async function runTests(): Promise<void> {
-  console.log('\n🧪 DramaGen AI API 配置测试\n');
+  console.log('\n🧪 DramaCut AI API 配置测试\n');
   console.log('='.repeat(60));
 
   // 动态导入模块

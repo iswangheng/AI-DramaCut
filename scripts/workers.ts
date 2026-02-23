@@ -1,5 +1,5 @@
 // ============================================
-// DramaGen AI 队列 Worker 启动脚本
+// DramaCut AI 队列 Worker 启动脚本
 // 在独立的进程中运行任务队列 Worker
 // ============================================
 
@@ -24,7 +24,7 @@ import { wsServer } from '../lib/ws/server';
  * 启动所有 Worker
  */
 async function startWorkers() {
-  console.log('🚀 启动 DramaGen AI 队列 Workers...\n');
+  console.log('🚀 启动 DramaCut AI 队列 Workers...\n');
 
   // 1. 启动视频处理 Worker（镜头检测）
   queueManager.createWorker(QUEUE_NAMES.videoProcessing, videoJobProcessor);

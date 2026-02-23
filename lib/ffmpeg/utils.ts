@@ -1,5 +1,5 @@
 import { execSync } from "child_process";
-import { existsSync } from "fs";
+import { existsSync, statSync } from "fs";
 import {
   TrimOptions,
   AudioExtractOptions,
@@ -197,4 +197,89 @@ export function normalizeFrameRate(inputPath: string, outputPath: string, fps = 
   } catch (error) {
     throw new Error(`帧率对齐失败: ${error}`);
   }
+}
+
+/**
+ * 提取关键帧
+ * 每隔指定秒数提取一帧，用于 Gemini 分析
+ *
+ * @param inputPath 输入视频路径
+ * @param outputDir 输出目录
+ * @param intervalSeconds 提取间隔（秒），默认 3 秒
+ * @returns 提取的关键帧信息数组
+ */
+export interface ExtractKeyframeResult {
+  framePath: string;
+  timestampMs: number;
+  frameNumber: number;
+  fileSize: number;
+}
+
+export function extractKeyframes(
+  inputPath: string,
+  outputDir: string,
+  intervalSeconds = 3
+): ExtractKeyframeResult[] {
+  validateFileExists(inputPath);
+
+  // 创建输出目录
+  execSync(`mkdir -p "${outputDir}"`);
+
+  // 使用 FFmpeg 提取关键帧
+  // -vf fps=1/3 表示每 3 秒提取一帧
+  // frame_%05d.jpg 表示文件名格式（frame_00001.jpg）
+  const command = `npx remotion ffmpeg -i "${inputPath}" -vf "fps=1/${intervalSeconds}" "${outputDir}/frame_%05d.jpg" -y`;
+
+  console.log(`执行关键帧提取: ${command}`);
+
+  try {
+    execSync(command, {
+      stdio: ["ignore", "inherit", "inherit"],
+    });
+  } catch (error) {
+    throw new Error(`关键帧提取失败: ${error}`);
+  }
+
+  // 获取视频时长（毫秒）
+  const durationCommand = `npx remotion ffmpeg -i "${inputPath}" 2>&1 | grep "Duration" | cut -d ' ' -f 4 | head -n 1`;
+  const durationOutput = execSync(durationCommand, { encoding: 'utf-8' });
+  const durationMatch = durationOutput.match(/(\d{2}):(\d{2}):(\d{2}\.\d{2})/);
+
+  if (!durationMatch) {
+    throw new Error('无法获取视频时长');
+  }
+
+  const [, hours, minutes, seconds] = durationMatch;
+  const durationMs = (parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds)) * 1000;
+
+  // 获取帧率
+  const fpsCommand = `npx remotion ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 "${inputPath}"`;
+  const fpsOutput = execSync(fpsCommand, { encoding: 'utf-8' }).trim();
+  const fps = fpsOutput.split('/')[0] ? parseFloat(eval(fpsOutput)) : 30; // 评估分数形式
+
+  // 收集提取的关键帧信息
+  const results: ExtractKeyframeResult[] = [];
+  let frameNumber = 1;
+  for (let timestampMs = 0; timestampMs < durationMs; timestampMs += intervalSeconds * 1000) {
+    const framePath = `${outputDir}/frame_${String(frameNumber).padStart(5, '0')}.jpg`;
+
+    // 检查文件是否存在
+    if (existsSync(framePath)) {
+      const stats = statSync(framePath);
+      const fileSize = stats.size;
+
+      results.push({
+        framePath,
+        timestampMs,
+        frameNumber,
+        fileSize,
+      });
+
+      frameNumber++;
+    }
+  }
+
+  console.log(`✅ 成功提取 ${results.length} 个关键帧`);
+
+  return results;
 }

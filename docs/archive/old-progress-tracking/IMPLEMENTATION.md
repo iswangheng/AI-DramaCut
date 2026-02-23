@@ -1,4 +1,4 @@
-# DramaGen AI - 开发进度
+# DramaCut AI - 开发进度
 
 ## ✅ 已完成
 

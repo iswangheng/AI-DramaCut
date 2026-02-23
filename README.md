@@ -1,4 +1,4 @@
-# DramaGen AI
+# DramaCut AI
 
 > 智能化短剧视频生产工具 - 从原始长视频到高点击短视频的自动化/半自动化产出
 
@@ -10,7 +10,7 @@
 
 ## 📖 项目简介
 
-DramaGen AI 是一款面向短剧/漫剧剪辑师、投放运营及自媒体博主的智能化视频生产工具。系统深度集成 **Gemini 3** 的多模态理解能力，实现从原始长视频到高点击短视频的自动化产出。
+DramaCut AI 是一款面向短剧/漫剧剪辑师、投放运营及自媒体博主的智能化视频生产工具。系统深度集成 **Gemini 3** 的多模态理解能力，实现从原始长视频到高点击短视频的自动化产出。
 
 ### 核心功能
 
@@ -831,4 +831,4 @@ tail -f logs/worker.log | grep upload
 
 ---
 
-**Made with ❤️ by DramaGen AI Team**
+**Made with ❤️ by DramaCut AI Team**

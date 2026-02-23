@@ -325,8 +325,8 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
                         {video.displayTitle || video.filename}
                       </h3>
                       <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                        {/* 集数标签 */}
-                        {video.episodeNumber && (
+                        {/* 集数标签 - 只在没有 displayTitle 时显示，避免重复 */}
+                        {video.episodeNumber && !video.displayTitle && (
                           <>
                             <Badge variant="outline" className="text-xs">
                               第{video.episodeNumber}集

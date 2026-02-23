@@ -1,6 +1,6 @@
-# DramaGen AI - API 配置指南
+# DramaCut AI - API 配置指南
 
-本文档介绍 DramaGen AI 的 API 配置系统，包括 Gemini 3 和 ElevenLabs 的集成。
+本文档介绍 DramaCut AI 的 API 配置系统，包括 Gemini 3 和 ElevenLabs 的集成。
 
 ---
 
@@ -274,9 +274,9 @@ const subtitles = ElevenLabsClient.convertToRemotionSubtitles(
 
 ## 📚 相关文档
 
-- **产品需求**: `DramaGen AI 产品需求文档 (PRD).md`
-- **技术架构**: `DramaGen AI 技术架构方案.md`
-- **UI 设计**: `DramaGen AI UI 设计与交互规范.md`
+- **产品需求**: `DramaCut AI 产品需求文档 (PRD).md`
+- **技术架构**: `DramaCut AI 技术架构方案.md`
+- **UI 设计**: `DramaCut AI UI 设计与交互规范.md`
 - **Prompts**: `prompts.md`
 
 ---

@@ -1,4 +1,4 @@
-# DramaGen AI 产品需求文档 (PRD)
+# DramaCut AI 产品需求文档 (PRD)
 
 ## 1. 全链路工作流 (Pipeline)
 

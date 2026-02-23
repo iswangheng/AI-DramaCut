@@ -1,5 +1,5 @@
 // ============================================
-// DramaGen AI 初始化脚本
+// DramaCut AI 初始化脚本
 // 用于在应用启动时初始化数据库和任务队列
 // ============================================
 
@@ -13,7 +13,7 @@ import { elevenlabsClient } from '../api/elevenlabs';
  * 初始化应用基础设施
  */
 export async function initializeApp() {
-  console.log('🚀 正在初始化 DramaGen AI...');
+  console.log('🚀 正在初始化 DramaCut AI...');
 
   try {
     // 1. 初始化数据库
@@ -80,7 +80,7 @@ export async function initializeApp() {
       console.warn('⚠️  启动 Workers 失败:', error);
     }
 
-    console.log('🎉 DramaGen AI 初始化完成！');
+    console.log('🎉 DramaCut AI 初始化完成！');
 
     // 打印统计信息
     const stats = await dbClient.getStats();
@@ -96,7 +96,7 @@ export async function initializeApp() {
  * 清理应用资源
  */
 export async function cleanupApp() {
-  console.log('🧹 正在清理 DramaGen AI...');
+  console.log('🧹 正在清理 DramaCut AI...');
 
   try {
     // 关闭队列管理器

@@ -1,4 +1,4 @@
-# DramaGen AI 技术架构方案
+# DramaCut AI 技术架构方案
 
 **更新时间**: 2026-02-08
 **版本**: v2.0
@@ -455,4 +455,4 @@ console.log({
 ---
 
 **最后更新**: 2026-02-08
-**维护者**: DramaGen AI Team
+**维护者**: DramaCut AI Team

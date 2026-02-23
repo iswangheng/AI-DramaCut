@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Clock, Eye, Sparkles, TreeDeciduous, Loader2, RefreshCw, Play } from "lucide-react";
+import { ArrowLeft, Clock, Eye, Sparkles, TreeDeciduous, Loader2, RefreshCw, Play, Image, FileText } from "lucide-react";
 import { VideoClipPlayer } from "@/components/video-clip-player";
 
 interface Shot {
@@ -40,6 +40,33 @@ interface Highlight {
   category: string;
 }
 
+interface Keyframe {
+  id: number;
+  videoId: number;
+  framePath: string;
+  timestampMs: number;
+  frameNumber: number;
+  fileSize: number;
+}
+
+interface TranscriptionSegment {
+  id: number;
+  start: number;
+  end: number;
+  text: string;
+}
+
+interface Transcription {
+  id: number;
+  videoId: number;
+  text: string;
+  language: string;
+  duration: number;
+  segments: TranscriptionSegment[];
+  model: string;
+  processingTimeMs: number;
+}
+
 interface VideoDetail {
   id: number;
   filename: string;
@@ -61,6 +88,8 @@ function VideoDetailContent({ videoId }: { videoId: string }) {
   const [shots, setShots] = useState<Shot[]>([]);
   const [storylines, setStorylines] = useState<Storyline[]>([]);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
+  const [keyframes, setKeyframes] = useState<Keyframe[]>([]);
+  const [transcription, setTranscription] = useState<Transcription | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectProgress, setDetectProgress] = useState(0);
   const [detectError, setDetectError] = useState<string | null>(null);
@@ -217,6 +246,20 @@ function VideoDetailContent({ videoId }: { videoId: string }) {
           setHighlights(highlightsData.data || []);
         }
 
+        // 加载关键帧
+        const keyframesRes = await fetch(`/api/videos/${videoId}/keyframes`);
+        if (keyframesRes.ok) {
+          const keyframesData = await keyframesRes.json();
+          setKeyframes(keyframesData.data || []);
+        }
+
+        // 加载转录文本
+        const transcriptionRes = await fetch(`/api/videos/${videoId}/transcription`);
+        if (transcriptionRes.ok) {
+          const transcriptionData = await transcriptionRes.json();
+          setTranscription(transcriptionData.data || null);
+        }
+
         // 检查是否有正在进行的检测任务
         const statusRes = await fetch(`/api/videos/${videoId}/highlights/status`);
         if (statusRes.ok) {
@@ -342,7 +385,7 @@ function VideoDetailContent({ videoId }: { videoId: string }) {
       {/* 内容区域 */}
       <div className="container mx-auto px-4 py-8">
         <Tabs defaultValue="shots" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+          <TabsList className="grid w-full grid-cols-5 lg:w-[600px]">
             <TabsTrigger value="shots" className="cursor-pointer">
               <Eye className="w-4 h-4 mr-2" />
               镜头分析 ({shots.length})
@@ -354,6 +397,14 @@ function VideoDetailContent({ videoId }: { videoId: string }) {
             <TabsTrigger value="highlights" className="cursor-pointer">
               <Sparkles className="w-4 h-4 mr-2" />
               高光片段 ({highlights.length})
+            </TabsTrigger>
+            <TabsTrigger value="keyframes" className="cursor-pointer">
+              <Image className="w-4 h-4 mr-2" />
+              关键帧 ({keyframes.length})
+            </TabsTrigger>
+            <TabsTrigger value="transcription" className="cursor-pointer">
+              <FileText className="w-4 h-4 mr-2" />
+              转录文本
             </TabsTrigger>
           </TabsList>
 
@@ -599,6 +650,144 @@ function VideoDetailContent({ videoId }: { videoId: string }) {
                         )}
                       </div>
                     )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* 关键帧 */}
+          <TabsContent value="keyframes" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>关键帧提取结果</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  从视频中每 3 秒提取的关键帧，用于 AI 分析
+                </p>
+              </CardHeader>
+              <CardContent>
+                {keyframes.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                    {keyframes.map((keyframe) => (
+                      <div
+                        key={keyframe.id}
+                        className="group relative aspect-video bg-muted rounded-lg overflow-hidden cursor-pointer hover:shadow-lg transition-all"
+                        onClick={() => handlePlayClip(keyframe.timestampMs, keyframe.timestampMs + 3000)}
+                      >
+                        {/* 关键帧图片 */}
+                        <img
+                          src={keyframe.framePath}
+                          alt={`关键帧 ${keyframe.frameNumber}`}
+                          className="w-full h-full object-cover"
+                        />
+
+                        {/* 悬浮信息 */}
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <div className="text-center text-white">
+                            <p className="text-sm font-medium">
+                              {formatTime(keyframe.timestampMs)}
+                            </p>
+                            <p className="text-xs text-gray-300">
+                              帧 {keyframe.frameNumber}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* 播放按钮 */}
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Play className="w-8 h-8 text-white" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="text-6xl mb-4">📸</div>
+                    <p className="text-muted-foreground mb-2">
+                      暂无关键帧数据
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      视频分析时会自动提取关键帧
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* 转录文本 */}
+          <TabsContent value="transcription" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>音频转录文本（Whisper ASR）</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  使用 OpenAI Whisper 模型将视频中的语音转录为文字
+                </p>
+              </CardHeader>
+              <CardContent>
+                {transcription ? (
+                  <div className="space-y-6">
+                    {/* 基本信息 */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted rounded-lg">
+                      <div>
+                        <p className="text-sm text-muted-foreground">语言</p>
+                        <p className="font-medium">{transcription.language}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">时长</p>
+                        <p className="font-medium">{transcription.duration.toFixed(1)} 秒</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">片段数</p>
+                        <p className="font-medium">{transcription.segments.length}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">模型</p>
+                        <p className="font-medium">{transcription.model}</p>
+                      </div>
+                    </div>
+
+                    {/* 完整转录文本 */}
+                    <div>
+                      <h3 className="text-lg font-semibold mb-3">完整转录文本</h3>
+                      <div className="bg-muted p-4 rounded-lg max-h-96 overflow-y-auto">
+                        <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                          {transcription.text || '(无语音内容)'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* 分段转录（带时间戳） */}
+                    {transcription.segments.length > 0 && (
+                      <div>
+                        <h3 className="text-lg font-semibold mb-3">分段详情（带时间戳）</h3>
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                          {transcription.segments.map((segment, index) => (
+                            <div
+                              key={segment.id || index}
+                              className="flex items-start gap-3 p-3 bg-muted rounded-lg hover:bg-muted/80 transition-colors cursor-pointer"
+                              onClick={() => handlePlayClip(segment.start * 1000, segment.end * 1000)}
+                            >
+                              <Badge variant="outline" className="flex-shrink-0">
+                                {formatTime(segment.start * 1000)}
+                              </Badge>
+                              <p className="text-sm flex-1">{segment.text}</p>
+                              <Play className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="text-6xl mb-4">🎵</div>
+                    <p className="text-muted-foreground mb-2">
+                      暂无转录文本
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      视频分析时会自动转录音频内容
+                    </p>
                   </div>
                 )}
               </CardContent>

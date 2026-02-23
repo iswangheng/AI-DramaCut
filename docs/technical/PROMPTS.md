@@ -1,4 +1,4 @@
-# DramaGen AI - Gemini 3 Prompt Set
+# DramaCut AI - Gemini 3 Prompt Set
 
 ## P1：视频内容预分析 (Pre-analysis)
 **Role**: 资深短剧导演 & 爆款内容分析师

@@ -1,5 +1,5 @@
 // ============================================
-// DramaGen AI 任务处理器
+// DramaCut AI 任务处理器
 // Agent 4 - Worker 实现
 // ============================================
 
@@ -13,6 +13,8 @@ import { elevenlabsClient } from '../api/elevenlabs';
 import { queries } from '../db';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { transcribeAudio } from '../audio/transcriber';
+import { extractKeyframes as extractVideoKeyframes } from '../video/keyframes';
 
 // ============================================
 // 任务数据类型定义
@@ -228,19 +230,19 @@ async function processAnalyzeJob(job: Job<AnalyzeJobData>) {
 
       console.log(`✅ 采样完成，共 ${samplingResult.totalFrames} 帧`);
 
-      // 步骤 2: 提取并分析音频
-      let audioAnalysisResult = '';
+      // 步骤 2: 提取音频并使用 Whisper ASR 转录
+      let transcriptionResult: any = null;
       let hasAudio = true;
 
       try {
-        console.log('🎵 步骤 2/2: 提取并分析音频...');
+        console.log('🎵 步骤 2/2: 提取音频并转录...');
         await job.updateProgress(50);
         wsServer.sendProgress(job.id!, 50, '提取音频...');
 
         const { extractAudio } = await import('../ffmpeg');
-        const audioPath = join(process.cwd(), 'uploads', `video_${videoId}_audio.mp3`);
+        const audioPath = join(process.cwd(), 'uploads', `video_${videoId}_audio.wav`);
 
-        // 提取音频（MP3 格式，更小）
+        // 提取音频（WAV 格式，适合 Whisper）
         await extractAudio({
           inputPath: videoPath,
           outputPath: audioPath,
@@ -249,53 +251,57 @@ async function processAnalyzeJob(job: Job<AnalyzeJobData>) {
 
         console.log('✅ 音频提取完成');
 
-        // 使用 Gemini 分析音频
-        wsServer.sendProgress(job.id!, 55, '分析音频内容...');
-        console.log('🎵 调用 Gemini 分析音频...');
+        // 使用 Whisper ASR 转录音频
+        wsServer.sendProgress(job.id!, 55, '正在转录音频（Whisper ASR）...');
+        console.log('🎵 调用 Whisper ASR 转录音频...');
 
-        const audioPrompt = `请分析这段音频，提取以下信息：
-1. 对白：提取所有对话内容（如果是短剧片段）
-2. 配乐风格：背景音乐的风格（紧张、悲伤、浪漫、欢快等）
-3. 音效：关键音效（耳光、哭声、玻璃破碎、车门等）
-4. 情绪：音频传达的主要情绪
+        const startTime = Date.now();
+        transcriptionResult = await transcribeAudio(audioPath, {
+          model: 'small',  // 使用 small 模型（平衡速度和准确度）
+          language: 'zh',  // 中文
+        });
+        const processingTime = Date.now() - startTime;
 
-请以结构化的 JSON 格式返回：
-\`\`\`json
-{
-  "dialogue": "角色A: ...\\n角色B: ...",
-  "bgmStyle": "紧张/悲伤/浪漫/欢快/无",
-  "soundEffects": ["音效1", "音效2"],
-  "emotion": "主要情绪",
-  "hasDialogue": true
-}
-\`\`\``;
+        console.log(`✅ 音频转录完成 (${(processingTime / 1000).toFixed(1)}秒)`);
+        console.log(`  📝 转录文本长度: ${transcriptionResult.text.length} 字`);
+        console.log(`  🎬 片段数: ${transcriptionResult.segments.length} 个`);
 
-        const audioResponse = await geminiClient.analyzeAudio(audioPath, audioPrompt);
+        // 保存转录结果到数据库
+        await queries.audioTranscription.create({
+          videoId,
+          text: transcriptionResult.text,
+          language: transcriptionResult.language,
+          duration: transcriptionResult.duration,
+          segments: JSON.stringify(transcriptionResult.segments),
+          model: 'whisper-small',
+          processingTimeMs: processingTime,
+        });
 
-        if (audioResponse.success && audioResponse.data) {
-          // 解析音频分析结果
-          const audioJsonMatch = audioResponse.data.match(/```json\n([\s\S]*?)\n```/) ||
-                                 audioResponse.data.match(/```\n([\s\S]*?)\n```/);
-          const audioJsonText = audioJsonMatch ? audioJsonMatch[1] : audioResponse.data;
-
-          try {
-            const audioAnalysis = JSON.parse(audioJsonText);
-            audioAnalysisResult = JSON.stringify(audioAnalysis);
-            console.log('✅ 音频分析完成:', audioAnalysis);
-          } catch (parseError) {
-            console.warn('⚠️  音频分析 JSON 解析失败，使用原始文本');
-            audioAnalysisResult = audioResponse.data.substring(0, 500); // 截取前 500 字符
-          }
-        }
+        console.log('💾 转录结果已保存到数据库');
 
       } catch (audioError) {
-        console.warn('⚠️  音频提取或分析失败:', audioError);
+        console.warn('⚠️  音频提取或转录失败:', audioError);
         hasAudio = false;
-        audioAnalysisResult = '{"hasDialogue": false, "bgmStyle": "无", "soundEffects": [], "emotion": "未知"}';
+        transcriptionResult = null;
       }
 
-      // 步骤 3: 使用关键帧 + 音频信息进行分析
-      wsServer.sendProgress(job.id!, 60, '音频分析完成，开始画面分析...');
+      // 步骤 3: 使用关键帧 + 转录文本进行分析
+      wsServer.sendProgress(job.id!, 60, '音频转录完成，开始画面分析...');
+
+      // 构建转录信息（如果有）
+      let transcriptionInfo = '';
+      if (transcriptionResult && transcriptionResult.text) {
+        transcriptionInfo = `
+【音频转录信息（Whisper ASR）】
+完整文本：
+${transcriptionResult.text}
+
+关键片段：
+${transcriptionResult.segments.slice(0, 10).map((seg: any) =>
+  `[${seg.start.toFixed(1)}s-${seg.end.toFixed(1)}s] ${seg.text}`
+).join('\n')}
+`;
+      }
 
       response = await geminiClient.analyzeVideo(
         videoPath,
@@ -305,7 +311,7 @@ async function processAnalyzeJob(job: Job<AnalyzeJobData>) {
           job.updateProgress(adjustedProgress);
           wsServer.sendProgress(job.id!, adjustedProgress, message);
         },
-        audioAnalysisResult  // 传递音频分析结果
+        transcriptionInfo  // 传递转录文本信息
       );
 
     } catch (samplingError) {
@@ -734,32 +740,74 @@ async function processAnalyzeProjectStorylinesJob(job: Job<AnalyzeProjectStoryli
     // ========================================
     const existingShots = await queries.shot.getByVideoId(video.id);
     const existingHighlights = await queries.highlight.getByVideoId(video.id);
+    const existingTranscription = await queries.audioTranscription.getByVideoId(video.id);
+    const existingKeyframes = await queries.keyframe.getByVideoId(video.id);
 
     if (existingShots.length > 0 && existingHighlights.length > 0 && video.enhancedSummary) {
       console.log(`  ✅ 跳过已分析的第 ${episodeNum} 集（已有 ${existingShots.length} 个镜头，${existingHighlights.length} 个高光）`);
 
-      // 如果已提取关键帧，加载路径；否则提取
-      if (video.keyframesExtracted === 1) {
-        // TODO: 从数据库或文件系统加载已有关键帧路径
-        console.log(`  ✅ 关键帧已存在`);
+      // 如果已提取关键帧，使用已存在的；否则补充提取
+      if (existingKeyframes.length > 0) {
+        console.log(`  ✅ 关键帧已存在 (${existingKeyframes.length} 个)`);
+        keyframesResults.set(video.id, existingKeyframes.map((kf: any) => kf.framePath));
       } else {
         // 提取关键帧（即使已分析，也补充提取关键帧）
-        console.log(`  📸 提取关键帧（每 3 秒一帧）...`);
-        const keyframesResult = await extractKeyframes({
+        console.log(`  📸 补充提取关键帧（每 3 秒一帧）...`);
+
+        const keyframesResult = await extractVideoKeyframes({
           videoPath,
           outputDir: join(process.cwd(), 'public', 'keyframes', video.id.toString()),
-          intervalSeconds: 3,  // 每 3 秒一帧
-          filenamePrefix: `video_${video.id}_keyframe`
+          intervalSeconds: 3,
+          filenamePrefix: `video_${video.id}_keyframe`,
         });
 
-        keyframesResults.set(video.id, keyframesResult.framePaths);
-        console.log(`  ✅ 提取了 ${keyframesResult.framePaths.length} 个关键帧`);
+        // 保存关键帧到数据库
+        const keyframeData = keyframesResult.framePaths.map((framePath, index) => ({
+          videoId: video.id,
+          framePath,
+          timestampMs: keyframesResult.timestamps[index],
+          frameNumber: index + 1,
+          fileSize: 0,
+        }));
 
-        // 标记关键帧已提取
-        await db
-          .update(schema.videos)
-          .set({ keyframesExtracted: 1 })
-          .where(eq(schema.videos.id, video.id));
+        await queries.keyframe.createBatch(keyframeData);
+
+        keyframesResults.set(video.id, keyframesResult.framePaths);
+        console.log(`  ✅ 补充提取了 ${keyframesResult.framePaths.length} 个关键帧`);
+      }
+
+      // 检查是否已有转录
+      if (!existingTranscription) {
+        console.log(`  🎵 补充转录音频...`);
+        const audioPath = join(process.cwd(), 'uploads', `video_${video.id}_audio.wav`);
+
+        try {
+          await extractAudio({
+            inputPath: videoPath,
+            outputPath: audioPath,
+            sampleRate: 16000,
+          });
+
+          const transcriptionResult = await transcribeAudio(audioPath, {
+            model: 'small',
+            language: 'zh',
+          });
+
+          await queries.audioTranscription.create({
+            videoId: video.id,
+            text: transcriptionResult.text,
+            language: transcriptionResult.language,
+            duration: transcriptionResult.duration,
+            segments: JSON.stringify(transcriptionResult.segments),
+            model: 'whisper-small',
+          });
+
+          console.log(`  ✅ 补充转录完成 (${transcriptionResult.text.length} 字)`);
+        } catch (audioError) {
+          console.warn(`  ⚠️  音频转录失败:`, audioError);
+        }
+      } else {
+        console.log(`  ✅ 音频转录已存在`);
       }
 
       shotAnalysisResults.push({
@@ -781,21 +829,88 @@ async function processAnalyzeProjectStorylinesJob(job: Job<AnalyzeProjectStoryli
     // 1.1 提取关键帧（每 3 秒一帧，用于跨集分析）
     // ========================================
     console.log(`  📸 提取关键帧（每 3 秒一帧）...`);
-    const keyframesResult = await extractKeyframes({
+
+    const keyframesResult = await extractVideoKeyframes({
       videoPath,
       outputDir: join(process.cwd(), 'public', 'keyframes', video.id.toString()),
-      intervalSeconds: 3,  // 每 3 秒一帧
-      filenamePrefix: `video_${video.id}_keyframe`
+      intervalSeconds: 3,
+      filenamePrefix: `video_${video.id}_keyframe`,
     });
 
-    keyframesResults.set(video.id, keyframesResult.framePaths);
     console.log(`  ✅ 提取了 ${keyframesResult.framePaths.length} 个关键帧`);
 
+    // 保存关键帧到数据库
+    const keyframeData = keyframesResult.framePaths.map((framePath, index) => ({
+      videoId: video.id,
+      framePath,
+      timestampMs: keyframesResult.timestamps[index],
+      frameNumber: index + 1,
+      fileSize: 0,  // 文件大小暂时设为 0，可以后续补充
+    }));
+
+    await queries.keyframe.createBatch(keyframeData);
+    console.log(`  💾 保存了 ${keyframeData.length} 个关键帧到数据库`);
+
+    // 收集关键帧路径（用于后续分析）
+    keyframesResults.set(video.id, keyframesResult.framePaths);
+
     // ========================================
-    // 1.2 视频分析（包含增强摘要）
+    // 1.2 提取音频并使用 Whisper ASR 转录
+    // ========================================
+    console.log(`  🎵 提取音频并转录...`);
+
+    const audioPath = join(process.cwd(), 'uploads', `video_${video.id}_audio.wav`);
+    let transcriptionText = '';
+
+    try {
+      // 提取音频
+      await extractAudio({
+        inputPath: videoPath,
+        outputPath: audioPath,
+        sampleRate: 16000,
+      });
+
+      // 使用 Whisper 转录
+      const transcriptionResult = await transcribeAudio(audioPath, {
+        model: 'small',
+        language: 'zh',
+      });
+
+      transcriptionText = transcriptionResult.text;
+
+      // 保存到数据库
+      await queries.audioTranscription.create({
+        videoId: video.id,
+        text: transcriptionResult.text,
+        language: transcriptionResult.language,
+        duration: transcriptionResult.duration,
+        segments: JSON.stringify(transcriptionResult.segments),
+        model: 'whisper-small',
+      });
+
+      console.log(`  ✅ 音频转录完成 (${transcriptionResult.text.length} 字)`);
+    } catch (audioError) {
+      console.warn(`  ⚠️  音频转录失败:`, audioError);
+      transcriptionText = '';
+    }
+
+    // ========================================
+    // 1.3 视频分析（包含增强摘要 + 转录文本）
     // ========================================
     console.log(`  🎬 镜头分析中...`);
-    const analyzeResult = await geminiClient.analyzeVideo(videoPath);
+
+    // 构建包含转录文本的提示
+    let transcriptionHint = '';
+    if (transcriptionText) {
+      transcriptionHint = `
+
+【音频转录文本（Whisper ASR）】
+${transcriptionText}
+
+请结合上述转录文本，更准确地识别场景中的对话、角色和情绪。`;
+    }
+
+    const analyzeResult = await geminiClient.analyzeVideo(videoPath, undefined, undefined, transcriptionHint);
 
     if (analyzeResult.success && analyzeResult.data) {
       const analysis = analyzeResult.data;
@@ -839,7 +954,7 @@ async function processAnalyzeProjectStorylinesJob(job: Job<AnalyzeProjectStoryli
     }
 
     // ========================================
-    // 1.3 高光检测
+    // 1.4 高光检测
     // ========================================
     console.log(`  ✨ 高光检测中...`);
 

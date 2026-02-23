@@ -1,5 +1,5 @@
 // ============================================
-// DramaGen AI 数据库 Schema 定义
+// DramaCut AI 数据库 Schema 定义
 // 使用 Drizzle ORM + SQLite
 // ============================================
 
@@ -247,7 +247,48 @@ export const recapSegments = sqliteTable('recap_segments', {
 });
 
 // ============================================
-// 7. 任务队列表 (queue_jobs) - 用于跟踪 BullMQ 任务
+// 7. 音频转录表 (audio_transcriptions)
+// ============================================
+export const audioTranscriptions = sqliteTable('audio_transcriptions', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  videoId: integer('video_id').notNull().references(() => videos.id, { onDelete: 'cascade' }),  // 关联视频
+
+  // 转录结果
+  text: text('text').notNull(),                              // 完整转录文本
+  language: text('language').notNull(),                       // 检测到的语言（如 'zh', 'en'）
+  duration: integer('duration').notNull(),                    // 音频时长（秒）
+
+  // 分段信息（JSON 格式）
+  segments: text('segments').notNull(),                       // 转录分段（JSON 数组）
+
+  // 元数据
+  model: text('model').notNull(),                              // 使用的 Whisper 模型
+  processingTimeMs: integer('processing_time_ms'),            // 处理耗时（毫秒）
+
+  ...timestamps,
+});
+
+// ============================================
+// 8. 关键帧表 (keyframes)
+// ============================================
+export const keyframes = sqliteTable('keyframes', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  videoId: integer('video_id').notNull().references(() => videos.id, { onDelete: 'cascade' }),  // 关联视频
+
+  // 关键帧信息
+  framePath: text('frame_path').notNull(),                   // 关键帧文件路径
+  timestampMs: integer('timestamp_ms').notNull(),             // 时间戳（毫秒）
+  frameNumber: integer('frame_number').notNull(),             // 帧序号
+  fileSize: integer('file_size'),                             // 文件大小（字节）
+
+  // 元数据
+  extractedAt: integer('extracted_at', { mode: 'timestamp' }).notNull(),  // 提取时间
+
+  ...timestamps,
+});
+
+// ============================================
+// 9. 任务队列表 (queue_jobs) - 用于跟踪 BullMQ 任务
 // ============================================
 export const queueJobs = sqliteTable('queue_jobs', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -339,6 +380,12 @@ export type NewRecapTask = typeof recapTasks.$inferInsert;
 export type RecapSegment = typeof recapSegments.$inferSelect;
 export type NewRecapSegment = typeof recapSegments.$inferInsert;
 
+export type AudioTranscription = typeof audioTranscriptions.$inferSelect;
+export type NewAudioTranscription = typeof audioTranscriptions.$inferInsert;
+
+export type Keyframe = typeof keyframes.$inferSelect;
+export type NewKeyframe = typeof keyframes.$inferInsert;
+
 export type QueueJob = typeof queueJobs.$inferSelect;
 export type NewQueueJob = typeof queueJobs.$inferInsert;
 
@@ -355,5 +402,7 @@ export const schema = {
   highlights,
   recapTasks,
   recapSegments,
+  audioTranscriptions,
+  keyframes,
   queueJobs,
 };

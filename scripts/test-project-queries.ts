@@ -28,7 +28,7 @@ function logError(message: string) {
 
 async function main() {
   try {
-    console.log('\n🎬 DramaGen AI - 项目管理数据库测试\n');
+    console.log('\n🎬 DramaCut AI - 项目管理数据库测试\n');
 
     // 初始化数据库
     logSection('1. 初始化数据库');

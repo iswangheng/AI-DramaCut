@@ -44,7 +44,7 @@ export function Sidebar() {
           <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary-700 rounded-lg flex items-center justify-center text-white text-lg font-bold">
             ▶
           </div>
-          <span className="font-bold text-lg text-foreground">DramaGen AI</span>
+          <span className="font-bold text-lg text-foreground">DramaCut AI</span>
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-# DramaGen AI - 双 Agent 协作方案
+# DramaCut AI - 双 Agent 协作方案
 
 **更新时间**: 2025-02-09
 **并行 Agent 数量**: 2

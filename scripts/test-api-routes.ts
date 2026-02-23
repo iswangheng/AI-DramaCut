@@ -64,7 +64,7 @@ async function del(url: string): Promise<ApiResponse> {
 
 async function main() {
   try {
-    console.log('\n🎬 DramaGen AI - 项目管理 API 测试\n');
+    console.log('\n🎬 DramaCut AI - 项目管理 API 测试\n');
     console.log(`测试服务器: ${BASE_URL}\n`);
 
     // 测试 1: 创建项目

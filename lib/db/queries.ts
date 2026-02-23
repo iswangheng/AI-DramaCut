@@ -1,12 +1,24 @@
 // ============================================
-// DramaGen AI 数据库查询工具
+// DramaCut AI 数据库查询工具
 // 封装常用的数据库操作
 // ============================================
 
 import { db } from './client';
 import * as schema from './schema';
 import { eq, desc, and, sql, like, asc } from 'drizzle-orm';
-import type { Project, Video, Shot, Storyline, StorylineSegment, ProjectAnalysis, Highlight, RecapTask, RecapSegment } from './schema';
+import type {
+  Project,
+  Video,
+  Shot,
+  Storyline,
+  StorylineSegment,
+  ProjectAnalysis,
+  Highlight,
+  RecapTask,
+  RecapSegment,
+  AudioTranscription,
+  Keyframe,
+} from './schema';
 
 // ============================================
 // 项目相关查询 (projects)
@@ -847,6 +859,129 @@ export const statsQueries = {
 };
 
 // ============================================
+// 音频转录查询 (audio_transcriptions)
+// ============================================
+
+export const audioTranscriptionQueries = {
+  /**
+   * 创建转录记录
+   */
+  async create(data: {
+    videoId: number;
+    text: string;
+    language: string;
+    duration: number;
+    segments: string;
+    model: string;
+    processingTimeMs?: number;
+  }) {
+    const [result] = await db.insert(schema.audioTranscriptions).values(data).returning();
+    return result;
+  },
+
+  /**
+   * 根据 videoId 获取转录记录
+   */
+  async getByVideoId(videoId: number) {
+    const [result] = await db
+      .select()
+      .from(schema.audioTranscriptions)
+      .where(eq(schema.audioTranscriptions.videoId, videoId))
+      .limit(1);
+    return result || null;
+  },
+
+  /**
+   * 更新转录记录
+   */
+  async update(id: number, data: Partial<{ text: string; segments: string }>) {
+    const [result] = await db
+      .update(schema.audioTranscriptions)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(schema.audioTranscriptions.id, id))
+      .returning();
+    return result;
+  },
+
+  /**
+   * 删除转录记录
+   */
+  async delete(id: number) {
+    await db.delete(schema.audioTranscriptions).where(eq(schema.audioTranscriptions.id, id));
+  },
+};
+
+// ============================================
+// 关键帧查询 (keyframes)
+// ============================================
+
+export const keyframeQueries = {
+  /**
+   * 创建关键帧记录
+   */
+  async create(data: {
+    videoId: number;
+    framePath: string;
+    timestampMs: number;
+    frameNumber: number;
+    fileSize?: number;
+  }) {
+    const [result] = await db
+      .insert(schema.keyframes)
+      .values({ ...data, extractedAt: new Date() })
+      .returning();
+    return result;
+  },
+
+  /**
+   * 根据 videoId 获取所有关键帧
+   */
+  async getByVideoId(videoId: number) {
+    const results = await db
+      .select()
+      .from(schema.keyframes)
+      .where(eq(schema.keyframes.videoId, videoId))
+      .orderBy(schema.keyframes.timestampMs);
+    return results;
+  },
+
+  /**
+   * 批量创建关键帧记录
+   */
+  async createBatch(frames: Array<{
+    videoId: number;
+    framePath: string;
+    timestampMs: number;
+    frameNumber: number;
+    fileSize?: number;
+  }>) {
+    const results = await db
+      .insert(schema.keyframes)
+      .values(frames.map(f => ({ ...f, extractedAt: new Date() })))
+      .returning();
+    return results;
+  },
+
+  /**
+   * 删除指定视频的所有关键帧
+   */
+  async deleteByVideoId(videoId: number) {
+    await db.delete(schema.keyframes).where(eq(schema.keyframes.videoId, videoId));
+  },
+
+  /**
+   * 获取指定视频的关键帧数量
+   */
+  async getFrameCount(videoId: number) {
+    const [result] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(schema.keyframes)
+      .where(eq(schema.keyframes.videoId, videoId));
+    return result?.count || 0;
+  },
+};
+
+// ============================================
 // 导出所有查询
 // ============================================
 
@@ -860,6 +995,8 @@ export const queries = {
   highlight: highlightQueries,
   recapTask: recapTaskQueries,
   recapSegment: recapSegmentQueries,
+  audioTranscription: audioTranscriptionQueries,
+  keyframe: keyframeQueries,
   queueJob: queueJobQueries,
   stats: statsQueries,
 };

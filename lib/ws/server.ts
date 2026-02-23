@@ -1,5 +1,5 @@
 // ============================================
-// DramaGen AI WebSocket 服务器
+// DramaCut AI WebSocket 服务器
 // 用于实时推送任务进度到前端
 // ============================================
 
@@ -84,7 +84,7 @@ export class WSServer {
       // 发送欢迎消息
       this.sendToClient(ws, {
         type: 'status',
-        data: { message: '已连接到 DramaGen AI 服务器' },
+        data: { message: '已连接到 DramaCut AI 服务器' },
       });
     });
 

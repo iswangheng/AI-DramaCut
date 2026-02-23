@@ -18,6 +18,7 @@ export {
   mixAudio,
   adjustVolume,
   normalizeFrameRate,
+  extractKeyframes,
   msToTime,
   msToSeconds,
   validateFileExists,
