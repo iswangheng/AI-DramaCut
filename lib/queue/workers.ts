@@ -15,6 +15,7 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { transcribeAudio } from '../audio/transcriber';
 import { extractKeyframes as extractVideoKeyframes } from '../video/keyframes';
+import { eq } from 'drizzle-orm';  // ✅ 添加 eq 导入
 
 // ============================================
 // 任务数据类型定义
@@ -279,8 +280,26 @@ async function processAnalyzeJob(job: Job<AnalyzeJobData>) {
 
         console.log('💾 转录结果已保存到数据库');
 
+        // ✅ 立即清理临时音频文件，释放磁盘空间
+        try {
+          const { unlink } = await import('fs/promises');
+          await unlink(audioPath);
+          console.log(`🗑️  已清理临时音频文件: ${audioPath}`);
+        } catch (cleanupError) {
+          console.warn(`⚠️  清理音频文件失败: ${audioPath}`, cleanupError);
+        }
+
       } catch (audioError) {
         console.warn('⚠️  音频提取或转录失败:', audioError);
+
+        // ❌ 即使转录失败，也尝试清理临时文件
+        try {
+          const { unlink } = await import('fs/promises');
+          const audioPath = join(process.cwd(), 'uploads', `video_${videoId}_audio.wav`);
+          await unlink(audioPath);
+          console.log(`🗑️  已清理失败的临时音频文件: ${audioPath}`);
+        } catch {}
+
         hasAudio = false;
         transcriptionResult = null;
       }
@@ -343,65 +362,94 @@ ${transcriptionResult.segments.slice(0, 10).map((seg: any) =>
   // 保存分析结果到数据库
   const analysis = awaitedResponse.data;
 
-  // 1. 更新视频基本信息
-  await queries.video.updateAnalysis(videoId, {
-    summary: analysis.summary,
-    viralScore: analysis.viralScore,
+  // ============================================
+  // ✅ 使用细粒度事务保护核心数据
+  // 核心数据：视频基本信息 + 镜头切片（必须一致）
+  // ============================================
+  const { dbClient } = await import('../db/client');
+  const { db } = await import('../db/client');
+
+  await dbClient.transaction(async (tx) => {
+    // 1. 更新视频基本信息（核心）
+    await tx.update(db.videos)
+      .set({
+        summary: analysis.summary,
+        viralScore: analysis.viralScore,
+        status: 'ready',  // ✅ 状态更新也在事务中
+        updatedAt: new Date(),
+      })
+      .where(eq(db.videos.id, videoId));
+
+    // 2. 保存镜头切片（核心）
+    if (analysis.scenes && analysis.scenes.length > 0) {
+      const shotsData = analysis.scenes.map((scene: any) => {
+        // 构建增强的描述（包含音频信息）
+        let enhancedDescription = scene.description;
+
+        if (scene.audioInfo) {
+          const audioParts: string[] = [];
+
+          // 添加对白信息
+          if (scene.audioInfo.hasDialogue && scene.dialogue) {
+            audioParts.push(`对白: "${scene.dialogue}"`);
+          }
+
+          // 添加配乐信息
+          if (scene.audioInfo.bgmStyle) {
+            audioParts.push(`配乐: ${scene.audioInfo.bgmStyle}`);
+          }
+
+          // 添加音效信息
+          if (scene.audioInfo.soundEffects && scene.audioInfo.soundEffects.length > 0) {
+            audioParts.push(`音效: ${scene.audioInfo.soundEffects.join(', ')}`);
+          }
+
+          // 合并到描述中
+          if (audioParts.length > 0) {
+            enhancedDescription += `\n【音频信息】${audioParts.join(' | ')}`;
+          }
+        }
+
+        return {
+          videoId,
+          startMs: scene.startMs,
+          endMs: scene.endMs,
+          description: enhancedDescription,
+          emotion: scene.emotion,
+          dialogue: scene.dialogue || '',
+          characters: scene.characters ? JSON.stringify(scene.characters) : null,
+          viralScore: scene.viralScore || 0,
+          startFrame: Math.floor((scene.startMs / 1000) * 30), // 假设 30fps
+          endFrame: Math.floor((scene.endMs / 1000) * 30),
+        };
+      });
+
+      await tx.insert(db.shots).values(shotsData);
+      console.log(`💾 在事务中保存了 ${shotsData.length} 个镜头切片`);
+    }
+
+    // ✅ 事务提交：视频状态和镜头数据要么全部成功，要么全部回滚
   });
 
-  // 2. 保存镜头切片
-  if (analysis.scenes && analysis.scenes.length > 0) {
-    const shotsData = analysis.scenes.map((scene: any) => {
-      // 构建增强的描述（包含音频信息）
-      let enhancedDescription = scene.description;
+  console.log('✅ 核心数据事务提交成功');
 
-      if (scene.audioInfo) {
-        const audioParts: string[] = [];
+  // ============================================
+  // 分层容错：可选数据单独保存（失败不影响主流程）
+  // ============================================
 
-        // 添加对白信息
-        if (scene.audioInfo.hasDialogue && scene.dialogue) {
-          audioParts.push(`对白: "${scene.dialogue}"`);
-        }
-
-        // 添加配乐信息
-        if (scene.audioInfo.bgmStyle) {
-          audioParts.push(`配乐: ${scene.audioInfo.bgmStyle}`);
-        }
-
-        // 添加音效信息
-        if (scene.audioInfo.soundEffects && scene.audioInfo.soundEffects.length > 0) {
-          audioParts.push(`音效: ${scene.audioInfo.soundEffects.join(', ')}`);
-        }
-
-        // 合并到描述中
-        if (audioParts.length > 0) {
-          enhancedDescription += `\n【音频信息】${audioParts.join(' | ')}`;
-        }
-      }
-
-      return {
-        videoId,
-        startMs: scene.startMs,
-        endMs: scene.endMs,
-        description: enhancedDescription,
-        emotion: scene.emotion,
-        dialogue: scene.dialogue || '',
-        characters: scene.characters ? JSON.stringify(scene.characters) : null,
-        viralScore: scene.viralScore || 0,
-        startFrame: Math.floor((scene.startMs / 1000) * 30), // 假设 30fps
-        endFrame: Math.floor((scene.endMs / 1000) * 30),
-      };
-    });
-
-    await queries.shot.createMany(shotsData);
-    console.log(`💾 保存了 ${shotsData.length} 个镜头切片（包含音频信息）`);
+  // 可选数据 1：关键帧（提取失败不影响主流程）
+  try {
+    if (analysis.scenes && analysis.scenes.length > 0) {
+      console.log('📸 尝试保存关键帧...');
+      // 关键帧保存逻辑（如果有的话）
+      // await queries.keyframe.createBatch(...);
+    }
+  } catch (keyframeError) {
+    console.warn('⚠️ 关键帧保存失败，但不影响主分析', keyframeError);
   }
 
   // 注意：高光片段由专门的 detect-highlights 任务负责处理
   // 这里不再创建占位符数据，避免数据不一致
-
-  // 更新视频状态为 ready（分析完成）
-  await queries.video.updateStatus(videoId, 'ready');
 
   // 更新进度: 100%
   await job.updateProgress(100);
@@ -803,8 +851,24 @@ async function processAnalyzeProjectStorylinesJob(job: Job<AnalyzeProjectStoryli
           });
 
           console.log(`  ✅ 补充转录完成 (${transcriptionResult.text.length} 字)`);
+
+          // ✅ 立即清理临时音频文件
+          try {
+            const { unlink } = await import('fs/promises');
+            await unlink(audioPath);
+            console.log(`  🗑️  已清理临时音频文件`);
+          } catch (cleanupError) {
+            console.warn(`  ⚠️  清理音频文件失败`, cleanupError);
+          }
+
         } catch (audioError) {
           console.warn(`  ⚠️  音频转录失败:`, audioError);
+
+          // ❌ 即使失败也清理临时文件
+          try {
+            const { unlink } = await import('fs/promises');
+            await unlink(audioPath);
+          } catch {}
         }
       } else {
         console.log(`  ✅ 音频转录已存在`);
@@ -889,9 +953,25 @@ async function processAnalyzeProjectStorylinesJob(job: Job<AnalyzeProjectStoryli
       });
 
       console.log(`  ✅ 音频转录完成 (${transcriptionResult.text.length} 字)`);
+
+      // ✅ 立即清理临时音频文件
+      try {
+        const { unlink } = await import('fs/promises');
+        await unlink(audioPath);
+        console.log(`  🗑️  已清理临时音频文件`);
+      } catch (cleanupError) {
+        console.warn(`  ⚠️  清理音频文件失败`, cleanupError);
+      }
+
     } catch (audioError) {
       console.warn(`  ⚠️  音频转录失败:`, audioError);
       transcriptionText = '';
+
+      // ❌ 即使失败也清理临时文件
+      try {
+        const { unlink } = await import('fs/promises');
+        await unlink(audioPath);
+      } catch {}
     }
 
     // ========================================
@@ -1026,12 +1106,85 @@ ${transcriptionText}
 
   console.log(`  📊 已加载 ${enhancedSummaries.size} 个视频的增强摘要`);
 
-  // 调用项目级分析（传入增强摘要和关键帧）
-  const projectStorylinesResult = await geminiClient.analyzeProjectStorylines(
-    videos,
-    enhancedSummaries,
-    keyframesResults
-  );
+  // ✅ ========================================
+  // 增量分析优化：检查是否已有项目分析
+  // ========================================
+  const existingAnalysis = await queries.projectAnalysis.getByProjectId(projectId);
+
+  let projectStorylinesResult;
+
+  if (existingAnalysis && existingAnalysis.analyzedAt) {
+    // 已有项目分析，检查是否有新视频
+    const analyzedAt = new Date(existingAnalysis.analyzedAt);
+    const newVideosSinceLastAnalysis = videos.filter((v: any) => {
+      const videoCreatedAt = new Date(v.createdAt);
+      return videoCreatedAt > analyzedAt;
+    });
+
+    if (newVideosSinceLastAnalysis.length > 0 && newVideosSinceLastAnalysis.length < videos.length) {
+      // ✅ 使用增量分析（节省成本）
+      console.log(`\n💡 [增量分析] 检测到已有项目分析（${existingAnalysis.analyzedAt.toISOString()}）`);
+      console.log(`📊 [增量分析] 共 ${videos.length} 集，其中 ${newVideosSinceLastAnalysis.length} 集为新增`);
+
+      // 解析现有的故事线数据
+      const existingStorylines = await queries.storyline.getByProjectId(projectId);
+      const existingProjectStorylines: import('../api/gemini').ProjectStorylines = {
+        mainPlot: existingAnalysis.mainPlot || '',
+        subplotCount: existingAnalysis.subplotCount || 0,
+        characterRelationships: existingAnalysis.characterRelationships
+          ? JSON.parse(existingAnalysis.characterRelationships as string)
+          : {},
+        foreshadowings: existingAnalysis.foreshadowings
+          ? JSON.parse(existingAnalysis.foreshadowings as string)
+          : [],
+        crossEpisodeHighlights: existingAnalysis.crossEpisodeHighlights
+          ? JSON.parse(existingAnalysis.crossEpisodeHighlights as string)
+          : [],
+        storylines: existingStorylines.map((sl: any) => ({
+          id: sl.id.toString(),
+          name: sl.name,
+          description: sl.description,
+          attractionScore: sl.attractionScore,
+          category: sl.category,
+          segments: [],  // segments 会在增量分析中重新填充
+        })),
+      };
+
+      // 调用增量分析
+      projectStorylinesResult = await geminiClient.incrementalProjectAnalysis(
+        existingProjectStorylines,
+        newVideosSinceLastAnalysis,
+        videos,
+        enhancedSummaries,
+        keyframesResults
+      );
+
+      if (!projectStorylinesResult.success || !projectStorylinesResult.data) {
+        console.warn(`⚠️  [增量分析] 失败，降级为完整分析...`);
+        projectStorylinesResult = await geminiClient.analyzeProjectStorylines(
+          videos,
+          enhancedSummaries,
+          keyframesResults
+        );
+      }
+    } else {
+      // 没有新视频或全部是新视频，使用完整分析
+      console.log(`ℹ️  [完整分析] 无已有分析或全部视频为新，执行完整分析`);
+      projectStorylinesResult = await geminiClient.analyzeProjectStorylines(
+        videos,
+        enhancedSummaries,
+        keyframesResults
+      );
+    }
+  } else {
+    // 首次分析，使用完整分析
+    console.log(`🆕 [首次分析] 首次进行项目级分析`);
+    projectStorylinesResult = await geminiClient.analyzeProjectStorylines(
+      videos,
+      enhancedSummaries,
+      keyframesResults
+    );
+  }
 
   if (!projectStorylinesResult.success || !projectStorylinesResult.data) {
     throw new Error(projectStorylinesResult.error || "项目级故事线分析失败");

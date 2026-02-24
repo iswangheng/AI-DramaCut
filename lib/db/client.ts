@@ -382,6 +382,36 @@ class DatabaseClient {
       recapTasks: recapTaskCount.length,
     };
   }
+
+  /**
+   * 在事务中执行操作（细粒度事务）
+   * @param callback 事务回调函数，接收 Drizzle db 实例
+   * @returns 事务执行结果
+   *
+   * 示例：
+   * await dbClient.transaction(async (db) => {
+   *   await db.insert(keyframes).values(...);
+   *   await db.insert(audioTranscription).values(...);
+   *   // 任意失败自动回滚
+   * });
+   */
+  async transaction<T>(
+    callback: (db: ReturnType<typeof drizzle>) => Promise<T>
+  ): Promise<T> {
+    const sqlite = this.getSqlite();
+
+    if (!sqlite) {
+      throw new Error('SQLite 连接未初始化');
+    }
+
+    // 获取 Drizzle db 实例
+    const db = this.getDb();
+
+    // 使用 better-sqlite3 的事务支持
+    return sqlite.transaction(() => {
+      return callback(db);
+    })();
+  }
 }
 
 // ============================================

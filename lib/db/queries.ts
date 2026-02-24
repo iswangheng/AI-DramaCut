@@ -100,13 +100,66 @@ export const projectQueries = {
   },
 
   /**
-   * 删除项目
+   * 删除项目（级联删除关键帧文件）
    */
   async delete(id: number) {
+    // ✅ 步骤 1: 获取项目的所有视频（在删除前）
+    const videos = await db
+      .select()
+      .from(schema.videos)
+      .where(eq(schema.videos.projectId, id));
+
+    console.log(`🗑️ 准备删除项目 ${id}，包含 ${videos.length} 个视频`);
+
+    // ✅ 步骤 2: 删除每个视频的关键帧文件
+    const fs = await import('fs/promises');
+    const path = await import('path');
+
+    let cleanedKeyframesCount = 0;
+    let freedSpaceBytes = 0;
+
+    for (const video of videos) {
+      const keyframesDir = path.join(process.cwd(), 'public', 'keyframes', video.id.toString());
+
+      try {
+        // 检查目录是否存在
+        const { stat } = await import('fs/promises');
+
+        // 计算目录大小
+        let totalSize = 0;
+        try {
+          const files = await fs.readdir(keyframesDir, { recursive: true });
+          for (const file of files) {
+            const filePath = path.join(keyframesDir, file);
+            try {
+              const stats = await stat(filePath);
+              if (stats.isFile()) {
+                totalSize += stats.size;
+                cleanedKeyframesCount++;
+              }
+            } catch {}
+          }
+        } catch {}
+
+        // 删除目录
+        await fs.rm(keyframesDir, { recursive: true, force: true });
+
+        freedSpaceBytes += totalSize;
+
+        console.log(`  🗑️  已清理视频 ${video.id} 的关键帧目录 (${totalSize > 0 ? (totalSize / 1024 / 1024).toFixed(2) + 'MB' : '空目录'})`);
+      } catch (error) {
+        console.warn(`  ⚠️ 清理视频 ${video.id} 的关键帧目录失败:`, error);
+      }
+    }
+
+    // ✅ 步骤 3: 删除数据库记录（会级联删除所有关联数据）
     const [project] = await db
       .delete(schema.projects)
       .where(eq(schema.projects.id, id))
       .returning();
+
+    console.log(`✅ 项目 ${id} 删除完成，清理了 ${cleanedKeyframesCount} 个关键帧文件，释放了 ${(freedSpaceBytes / 1024 / 1024).toFixed(2)}MB 磁盘空间`);
+
     return project;
   },
 
@@ -229,6 +282,58 @@ export const videoQueries = {
       .where(eq(schema.videos.status, status))
       .orderBy(desc(schema.videos.createdAt));
     return videos;
+  },
+
+  /**
+   * 删除视频（级联删除关键帧文件）
+   */
+  async delete(id: number) {
+    console.log(`🗑️ 准备删除视频 ${id}`);
+
+    // ✅ 步骤 1: 删除该视频的关键帧文件
+    const fs = await import('fs/promises');
+    const path = await import('path');
+
+    const keyframesDir = path.join(process.cwd(), 'public', 'keyframes', id.toString());
+
+    try {
+      // 检查目录是否存在
+      const { stat } = await import('fs/promises');
+
+      // 计算目录大小
+      let totalSize = 0;
+      let keyframesCount = 0;
+      try {
+        const files = await fs.readdir(keyframesDir, { recursive: true });
+        for (const file of files) {
+          const filePath = path.join(keyframesDir, file);
+          try {
+            const stats = await stat(filePath);
+            if (stats.isFile()) {
+              totalSize += stats.size;
+              keyframesCount++;
+            }
+          } catch {}
+        }
+      } catch {}
+
+      // 删除目录
+      await fs.rm(keyframesDir, { recursive: true, force: true });
+
+      console.log(`  🗑️  已清理视频 ${id} 的关键帧目录 (${keyframesCount} 个文件, ${(totalSize / 1024 / 1024).toFixed(2)}MB)`);
+    } catch (error) {
+      console.warn(`  ⚠️ 清理视频 ${id} 的关键帧目录失败:`, error);
+    }
+
+    // ✅ 步骤 2: 删除数据库记录（会级联删除关联数据）
+    const [video] = await db
+      .delete(schema.videos)
+      .where(eq(schema.videos.id, id))
+      .returning();
+
+    console.log(`✅ 视频 ${id} 删除完成`);
+
+    return video;
   },
 };
 
@@ -978,6 +1083,81 @@ export const keyframeQueries = {
       .from(schema.keyframes)
       .where(eq(schema.keyframes.videoId, videoId));
     return result?.count || 0;
+  },
+
+  /**
+   * 清理过期的关键帧（根据项目创建时间）
+   * @param daysToKeep 保留天数（默认 7 天）
+   * @returns 清理统计信息
+   */
+  async cleanupOldKeyframes(daysToKeep: number = 7) {
+    const { lt } = await import('drizzle-orm');
+    const path = await import('path');
+    const fs = await import('fs/promises');
+
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
+
+    // 查找过期项目（通过 videos 表关联）
+    const oldVideos = await db
+      .select({ id: schema.videos.id, projectId: schema.videos.projectId })
+      .from(schema.videos)
+      .where(lt(schema.videos.createdAt, cutoffDate));
+
+    let cleanedCount = 0;
+    let freedSpaceBytes = 0;
+    const cleanedProjects = new Set<number>();
+
+    for (const video of oldVideos) {
+      // 删除数据库记录
+      const deletedKeyframes = await db
+        .delete(schema.keyframes)
+        .where(eq(schema.keyframes.videoId, video.id))
+        .returning();
+
+      if (deletedKeyframes.length > 0) {
+        cleanedCount += deletedKeyframes.length;
+        cleanedProjects.add(video.projectId);
+
+        // 删除文件系统中的关键帧目录
+        const keyframesDir = path.join(process.cwd(), 'public', 'keyframes', video.id.toString());
+
+        try {
+          const { stat, readdir } = await import('fs/promises');
+
+          // 计算目录大小
+          let totalSize = 0;
+          try {
+            const files = await readdir(keyframesDir, { recursive: true });
+            for (const file of files) {
+              const filePath = path.join(keyframesDir, file);
+              try {
+                const stats = await stat(filePath);
+                if (stats.isFile()) {
+                  totalSize += stats.size;
+                }
+              } catch {}
+            }
+          } catch {}
+
+          // 删除目录
+          await fs.rm(keyframesDir, { recursive: true, force: true });
+          freedSpaceBytes += totalSize;
+
+          console.log(`🗑️ 已清理视频 ${video.id} 的关键帧:` +
+                      `${deletedKeyframes.length} 帧, ${(totalSize / 1024 / 1024).toFixed(2)}MB`);
+        } catch (error) {
+          console.warn(`⚠️ 清理关键帧目录失败: ${keyframesDir}`, error);
+        }
+      }
+    }
+
+    return {
+      cleanedVideos: oldVideos.length,
+      cleanedProjects: cleanedProjects.size,
+      cleanedKeyframes: cleanedCount,
+      freedSpaceMB: (freedSpaceBytes / 1024 / 1024).toFixed(2),
+    };
   },
 };
 

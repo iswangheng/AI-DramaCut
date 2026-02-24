@@ -1713,6 +1713,203 @@ ${episodeList}
   }
 
   /**
+   * 增量项目分析（仅分析新增视频，节省成本）
+   *
+   * @param existingAnalysis 现有的项目分析结果
+   * @param newVideos 新增的视频列表
+   * @param allVideos 所有视频（包括旧的）
+   * @param enhancedSummaries 所有视频的增强摘要
+   * @param keyframesMap 所有关键帧
+   */
+  async incrementalProjectAnalysis(
+    existingAnalysis: ProjectStorylines,
+    newVideos: Video[],
+    allVideos: Video[],
+    enhancedSummaries?: Map<number, EnhancedSummary>,
+    keyframesMap?: Map<number, string[]>
+  ): Promise<GeminiResponse<ProjectStorylines>> {
+    if (newVideos.length === 0) {
+      // 没有新视频，直接返回旧分析结果
+      console.log(`📊 [增量分析] 无新增视频，跳过分析`);
+      return {
+        success: true,
+        data: existingAnalysis,
+      };
+    }
+
+    const totalVideos = allVideos.length;
+    const newVideoCount = newVideos.length;
+
+    // 判断是否值得做增量分析
+    const incrementalRatio = newVideoCount / totalVideos;
+
+    if (incrementalRatio > 0.5) {
+      // 如果新增视频超过 50%，建议做完整分析
+      console.log(`⚠️  [增量分析] 新增视频占比 ${(incrementalRatio * 100).toFixed(0)}% (>50%)，建议使用完整分析`);
+      return this.analyzeProjectStorylines(allVideos, enhancedSummaries, keyframesMap);
+    }
+
+    console.log(`📊 [增量分析] 检测到 ${totalVideos} 集视频，其中 ${newVideoCount} 集为新增`);
+    console.log(`💡 [增量分析] 使用增量模式，可节省约 ${(incrementalRatio * 100).toFixed(0)}% API 成本`);
+
+    const systemInstruction = `你是一位资深的电视剧编剧和故事架构师。
+你的任务是分析一部连续剧的**新增集数**，并将其与现有项目分析结果整合。
+
+你需要理解现有项目的故事线和人物关系，然后将新集数的内容融入其中。${keyframesMap && keyframesMap.size > 0 ? '\n\n你可以使用提供的关键帧来验证跨集的视觉连贯性。' : ''}`;
+
+    // 构建现有项目摘要
+    const existingSummary = `
+**现有项目分析**（${existingAnalysis.storylines.length} 条故事线，共 ${totalVideos - newVideoCount} 集）：
+
+主线剧情：${existingAnalysis.mainPlot}
+
+已有故事线：
+${existingAnalysis.storylines.map((sl, index) => `
+  ${index + 1}. ${sl.name} (${sl.category})
+     - 描述：${sl.description}
+     - 吸引力分数：${sl.attractionScore}
+     - 跨越集数：${sl.segments.length} 集
+`).join('')}
+`;
+
+    // 构建新增剧集列表
+    const newEpisodesList = newVideos
+      .sort((a, b) => (a.episodeNumber || 0) - (b.episodeNumber || 0))
+      .map((v, index) => {
+        const epNum = v.episodeNumber || index + 1;
+        const summary = v.summary || '（暂无剧情梗概）';
+        const durationMin = Math.floor(v.durationMs / 60000);
+        let episodeInfo = `第${epNum}集：《${v.displayTitle || v.filename}》（${durationMin}分钟）\n剧情梗概：${summary}`;
+
+        // 如果有增强摘要，添加连贯性信息
+        if (enhancedSummaries && enhancedSummaries.has(v.id)) {
+          const enhanced = enhancedSummaries.get(v.id)!;
+
+          if (enhanced.openingState) {
+            episodeInfo += `\n  📍 开头状态：${enhanced.openingState.initialSituation}`;
+            if (enhanced.openingState.connectionToPrevious) {
+              episodeInfo += `\n  🔗 连接上集：${enhanced.openingState.connectionToPrevious}`;
+            }
+          }
+
+          if (enhanced.endingState && enhanced.endingState.cliffhanger) {
+            episodeInfo += `\n  🎭 结尾悬念：${enhanced.endingState.cliffhanger}`;
+          }
+        }
+
+        return episodeInfo;
+      })
+      .join('\n\n---\n\n');
+
+    const prompt = `我有一部连续剧项目，已经分析了 ${totalVideos - newVideoCount} 集，现在新增了 ${newVideoCount} 集，需要进行增量分析。
+
+${existingSummary}
+
+**新增剧集**（${newVideos.length} 集）：
+${newEpisodesList}
+
+**分析任务**：
+1. **故事线延续**：分析新集数如何延续现有的故事线（是否有新的发展、转折、高潮）
+2. **新故事线识别**：识别新集数中是否引入了新的故事线（如果有，提取 1-2 条）
+3. **人物关系演变**：分析新集数中主要角色的状态和关系变化
+4. **伏笔更新**：识别新集数中设置的伏笔或揭晓的现有伏笔
+5. **跨集高光**：找出涉及新集数的跨集精彩片段
+
+**重要要求**：
+- 📌 **保持一致性**：新分析结果必须与现有项目分析保持一致
+- 📌 **延续性**：重点分析新集数如何延续现有故事线
+- 📌 **完整性**：返回的 JSON 应包含**所有视频**（旧的+新的）的完整分析结果
+- 📌 **优化**：如果现有故事线在新集数中没有新内容，可以保持原样
+
+请返回更新后的完整 JSON 格式（包含所有集数的分析）：
+\`\`\`json
+{
+  "mainPlot": "${existingAnalysis.mainPlot}（根据新集数更新）",
+  "subplotCount": ${existingAnalysis.subplotCount},
+  "characterRelationships": {
+    ...(保留现有关系),
+    "ep${newVideos[0].episodeNumber}": {
+      // 新集数中的人物关系
+    }
+  },
+  "foreshadowings": [
+    ...(保留现有伏笔),
+    {
+      "set_up": "epX-YY:YY",
+      "payoff": "epZ-WW:WW",
+      "description": "新伏笔或揭晓"
+    }
+  ],
+  "crossEpisodeHighlights": [
+    ...(保留现有跨集高光),
+    {
+      "start_ep": X,
+      "start_ms": YYYY,
+      "end_ep": Z,
+      "end_ms": ZZZZ,
+      "description": "涉及新集数的跨集高光"
+    }
+  ],
+  "storylines": [
+    ...(现有故事线，根据新集数更新 segments),
+    {
+      "name": "新故事线名称（如果有）",
+      "description": "...",
+      "attractionScore": 8.0,
+      "category": "category",
+      "segments": [
+        ...现有 segments,
+        {
+          "videoId": ${newVideos[0].id},
+          "startMs: YYYY,
+          "endMs": ZZZZ,
+          "description": "新集中的片段"
+        }
+      ]
+    }
+  ]
+}
+\`\`\`
+
+**可用视频ID列表**：${allVideos.map(v => v.id).join(', ')}
+
+**注意事项**：
+1. **videoId** 必须使用实际的数据库视频 ID
+2. **storylines** 中的 segments 应包含所有集数（旧的+新的）
+3. 只识别真正重要的新故事线（1-2条即可）
+4. 保持 JSON 结构的完整性和一致性`;
+
+    console.log(`🎬 [增量分析] 开始分析 ${newVideos.length} 集新增视频...`);
+
+    const response = await this.callApi(prompt, systemInstruction);
+
+    if (!response.success || !response.data) {
+      // 如果增量分析失败，降级为完整分析
+      console.warn(`⚠️  [增量分析] 失败，降级为完整分析...`);
+      return this.analyzeProjectStorylines(allVideos, enhancedSummaries, keyframesMap);
+    }
+
+    const parsed = this.parseJsonResponse<ProjectStorylines>(response.data as string);
+
+    if (!parsed) {
+      return {
+        success: false,
+        error: 'Failed to parse incremental project analysis response',
+      };
+    }
+
+    console.log(`✅ [增量分析] 完成！`);
+    console.log(`   - 故事线数量：${parsed.storylines.length}（原有 ${existingAnalysis.storylines.length} 条）`);
+    console.log(`   - 伏笔总数：${parsed.foreshadowings.length}（原有 ${existingAnalysis.foreshadowings.length} 个）`);
+    console.log(`   - 跨集高光：${parsed.crossEpisodeHighlights.length}（原有 ${existingAnalysis.crossEpisodeHighlights.length} 个）`);
+
+    return {
+      ...response,
+      data: parsed,
+    };
+  }
+
+  /**
    * 格式化时间（毫秒 -> HH:MM:SS.mmm）
    */
   private formatTime(ms: number): string {

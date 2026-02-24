@@ -201,9 +201,15 @@ export const queueConfig = {
   },
 
   // 任务并发配置
-  maxConcurrentJobs: getNumberEnv('MAX_CONCURRENT_JOBS', 3),
+  maxConcurrentJobs: getNumberEnv('MAX_CONCURRENT_JOBS', 2),  // ✅ 限制并发数为 2，防止资源耗尽
   retryAttempts: getNumberEnv('JOB_RETRY_ATTEMPTS', 3),
   retryDelay: getNumberEnv('JOB_RETRY_DELAY', 5000),
+
+  // 速率限制配置（防止 API 滥用）
+  rateLimit: {
+    max: 10,       // 每分钟最多 10 个任务
+    duration: 60000,  // 60 秒
+  },
 
   // 队列名称
   queues: {

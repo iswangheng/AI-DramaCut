@@ -141,7 +141,13 @@ export class QueueManager {
       },
       {
         connection: this.redis,
-        concurrency: queueConfig.maxConcurrentJobs,
+        concurrency: queueConfig.maxConcurrentJobs,  // ✅ 限制并发数为 2
+
+        // ✅ 添加速率限制（防止任务过载）
+        limiter: queueConfig.rateLimit ? {
+          max: queueConfig.rateLimit.max,
+          duration: queueConfig.rateLimit.duration,
+        } : undefined,
       }
     );
 

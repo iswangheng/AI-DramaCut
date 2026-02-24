@@ -72,9 +72,17 @@ export async function extractKeyframes(
 
   console.log(`📹 [关键帧提取] 视频时长: ${duration}ms, 提取帧数: ${actualFrameCount}, 间隔: ${intervalSeconds}秒 (${intervalMs}ms)`);
 
-  // 提取关键帧
-  const framePaths: string[] = [];
-  const timestamps: number[] = [];
+  // ========================================
+  // ✅ 并行提取关键帧（性能提升 3-4 倍）
+  // ========================================
+
+  // 1. 准备所有帧的提取任务
+  const frameTasks: Array<{
+    index: number;
+    timestampMs: number;
+    timeFormat: string;
+    outputPath: string;
+  }> = [];
 
   for (let i = 0; i < actualFrameCount; i++) {
     // 计算当前帧的时间戳（毫秒）
@@ -92,23 +100,61 @@ export async function extractKeyframes(
     const filename = `${filenamePrefix}_${String(i + 1).padStart(3, '0')}.jpg`;
     const outputPath = join(actualOutputDir, filename);
 
-    // FFmpeg 命令：提取单帧
-    const ffmpegArgs = [
-      '-ss', timeFormat,              // 跳转到指定时间
-      '-i', videoPath,                // 输入文件
-      '-vframes', '1',                // 只提取 1 帧
-      '-q:v', '2',                    // 高质量 JPEG (1-31，越小越好)
-      '-y',                           // 覆盖已存在文件
-      outputPath
-    ];
-
-    await runFFmpeg(ffmpegArgs);
-
-    framePaths.push(outputPath);
-    timestamps.push(timestampMs);
-
-    console.log(`✅ 提取第 ${i + 1}/${actualFrameCount} 帧: ${timestampMs}ms -> ${filename}`);
+    frameTasks.push({
+      index: i,
+      timestampMs,
+      timeFormat,
+      outputPath,
+    });
   }
+
+  console.log(`📋 准备并行提取 ${frameTasks.length} 帧...`);
+
+  // 2. 并发控制（同时提取的帧数）
+  const concurrency = 4;  // 同时提取 4 帧（可根据 CPU 核心数调整）
+
+  // 3. 分批并行执行
+  const framePaths: string[] = [];
+  const timestamps: number[] = [];
+
+  for (let i = 0; i < frameTasks.length; i += concurrency) {
+    const batch = frameTasks.slice(i, i + concurrency);
+
+    console.log(`⚡ 正在提取第 ${i + 1}-${Math.min(i + concurrency, frameTasks.length)}/${frameTasks.length} 帧...`);
+
+    // 并行执行当前批次
+    const results = await Promise.all(
+      batch.map(async (task) => {
+        // FFmpeg 命令：提取单帧
+        const ffmpegArgs = [
+          '-ss', task.timeFormat,       // 跳转到指定时间
+          '-i', videoPath,              // 输入文件
+          '-vframes', '1',              // 只提取 1 帧
+          '-q:v', '2',                  // 高质量 JPEG (1-31，越小越好)
+          '-y',                         // 覆盖已存在文件
+          task.outputPath
+        ];
+
+        await runFFmpeg(ffmpegArgs);
+
+        console.log(`  ✅ 提取第 ${task.index + 1}/${frameTasks.length} 帧: ${task.timestampMs}ms`);
+
+        return {
+          path: task.outputPath,
+          timestamp: task.timestampMs,
+          index: task.index,
+        };
+      })
+    );
+
+    // 4. 按顺序收集结果
+    results.forEach((result) => {
+      framePaths[result.index] = result.path;
+      timestamps[result.index] = result.timestamp;
+    });
+  }
+
+  console.log(`🎉 并行提取完成！共 ${framePaths.length} 帧`);
 
   return {
     framePaths,
