@@ -143,11 +143,11 @@ function StorylinesPageContent({ projectId }: { projectId: string }) {
           const { status, jobId: runningJobId, progress } = data.data;
 
           // 如果有正在运行或最近运行的任务
-          if (status === 'processing' || status === 'pending' || status === 'completed') {
+          if (status === 'active' || status === 'waiting' || status === 'completed') {
             setJobId(runningJobId);
             setAnalyzeProgress(progress || 0);
 
-            if (status === 'processing' || status === 'pending') {
+            if (status === 'active' || status === 'waiting') {
               setAnalyzing(true);
               pollAnalysisStatus(runningJobId);
             } else {
@@ -189,7 +189,7 @@ function StorylinesPageContent({ projectId }: { projectId: string }) {
           setAnalyzing(false);
           setError(data.data.error || '分析失败');
         } else {
-          // 继续轮询
+          // 继续轮询（active 或 waiting 状态）
           setTimeout(() => pollAnalysisStatus(jobId), 2000);
         }
       }
