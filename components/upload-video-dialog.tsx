@@ -175,7 +175,7 @@ export function UploadVideoDialog({ projectId, onUploadComplete }: UploadVideoDi
           上传视频
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>上传视频</DialogTitle>
           <DialogDescription>
@@ -183,7 +183,8 @@ export function UploadVideoDialog({ projectId, onUploadComplete }: UploadVideoDi
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        {/* 可滚动的内容区域 */}
+        <div className="space-y-4 py-4 flex-1 overflow-y-auto pr-2">
           {/* 拖拽上传区域 */}
           <div
             {...getRootProps()}
