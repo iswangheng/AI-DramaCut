@@ -34,21 +34,37 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get('jobId');
 
-    if (!jobId) {
-      return NextResponse.json(
-        { success: false, error: "缺少 jobId 参数" },
-        { status: 400 }
-      );
-    }
+    let queueJob;
 
-    // 从数据库查询任务状态
-    const queueJob = await db.query.queueJobs.findFirst({
-      where: eq(schema.queueJobs.jobId, jobId),
-    });
+    if (jobId) {
+      // 如果指定了 jobId，查询该任务
+      queueJob = await db.query.queueJobs.findFirst({
+        where: eq(schema.queueJobs.jobId, jobId),
+      });
+    } else {
+      // 没有指定 jobId，查询最近的 gemini-analysis 任务
+      // 通过 jobType 筛选项目级分析任务
+      const allJobs = await db
+        .select()
+        .from(schema.queueJobs)
+        .where(eq(schema.queueJobs.jobType, 'analyze-project-storylines'))
+        .orderBy(desc(schema.queueJobs.createdAt))
+        .limit(10);
+
+      // 找到属于当前项目的任务（通过解析 payload）
+      queueJob = allJobs.find((job: any) => {
+        try {
+          const payload = JSON.parse(job.payload);
+          return payload.projectId === projectId;
+        } catch {
+          return false;
+        }
+      });
+    }
 
     if (!queueJob) {
       return NextResponse.json(
-        { success: false, error: "任务不存在" },
+        { success: false, error: "没有找到相关任务" },
         { status: 404 }
       );
     }

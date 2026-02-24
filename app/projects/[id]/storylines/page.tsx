@@ -119,17 +119,55 @@ function StorylinesPageContent({ projectId }: { projectId: string }) {
   const [highlightsData, setHighlightsData] = useState<{ totalHighlights: number; highlightsByVideo: VideoWithHighlights[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // 从 URL 参数中获取 jobId
+  // 从 URL 参数中获取 jobId，或者自动检测正在运行的任务
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const jobIdParam = params.get('jobId');
-    if (jobIdParam) {
-      setJobId(jobIdParam);
-      setAnalyzing(true);
-      pollAnalysisStatus(jobIdParam);
-    } else {
-      loadAllData();
-    }
+    const checkForRunningTask = async () => {
+      // 先尝试从 URL 获取 jobId
+      const params = new URLSearchParams(window.location.search);
+      const jobIdParam = params.get('jobId');
+
+      if (jobIdParam) {
+        // URL 中有 jobId，直接开始轮询
+        setJobId(jobIdParam);
+        setAnalyzing(true);
+        pollAnalysisStatus(jobIdParam);
+        return;
+      }
+
+      // URL 中没有 jobId，检查是否有正在运行的任务
+      try {
+        const response = await fetch(`/api/projects/${projectId}/analysis-status`);
+        const data = await response.json();
+
+        if (data.success && data.data) {
+          const { status, jobId: runningJobId, progress } = data.data;
+
+          // 如果有正在运行或最近运行的任务
+          if (status === 'processing' || status === 'pending' || status === 'completed') {
+            setJobId(runningJobId);
+            setAnalyzeProgress(progress || 0);
+
+            if (status === 'processing' || status === 'pending') {
+              setAnalyzing(true);
+              pollAnalysisStatus(runningJobId);
+            } else {
+              // 任务已完成，加载数据
+              await loadAllData();
+            }
+            return;
+          }
+        }
+
+        // 没有正在运行的任务，加载数据
+        await loadAllData();
+      } catch (err) {
+        console.error('检查任务状态失败:', err);
+        // 出错时直接加载数据
+        await loadAllData();
+      }
+    };
+
+    checkForRunningTask();
   }, [projectId]);
 
   // 轮询分析状态
