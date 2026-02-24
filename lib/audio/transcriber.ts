@@ -146,7 +146,6 @@ export async function transcribeAudio(
       `--output_format ${outputFormat}`,
       `--device ${device}`,  // ✅ 添加设备参数
       '--output_dir', join(audioPath, '..'),
-      '--verbose', // 显示详细日志
     ].join(' ');
 
     console.log(`  🔧 命令: whisper "${audioPath}" --model ${model} --device ${device} --language ${language}`);
