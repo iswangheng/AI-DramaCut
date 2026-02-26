@@ -740,9 +740,9 @@ async function processDetectHighlightsJob(job: Job<DetectHighlightsJobData>) {
  * 项目级故事线分析处理器（异步任务）
  */
 async function processAnalyzeProjectStorylinesJob(job: Job<AnalyzeProjectStorylinesJobData>) {
-  const { projectId, videoIds, totalVideos } = job.data;
+  const { projectId, videoIds, totalVideos, force = false } = job.data;
 
-  console.log(`🎬 [项目分析] 开始分析项目 ${projectId}，共 ${totalVideos} 集视频`);
+  console.log(`🎬 [项目分析] 开始分析项目 ${projectId}，共 ${totalVideos} 集视频${force ? '（强制重新分析）' : ''}`);
 
   // 导入数据库和 Gemini 客户端
   const { db } = await import('../db/client');
@@ -805,6 +805,9 @@ async function processAnalyzeProjectStorylinesJob(job: Job<AnalyzeProjectStoryli
       } else {
         // 提取关键帧（即使已分析，也补充提取关键帧）
         console.log(`  📸 补充提取关键帧（固定 30 帧，动态间隔）...`);
+
+        // 🔧 先删除旧的关键帧数据（防止重复累积）
+        await queries.keyframe.deleteByVideoId(video.id);
 
         const keyframesResult = await extractVideoKeyframes({
           videoPath,
@@ -897,6 +900,10 @@ async function processAnalyzeProjectStorylinesJob(job: Job<AnalyzeProjectStoryli
     // 1.1 提取关键帧（固定 30 帧，动态间隔，用于跨集分析）
     // ========================================
     console.log(`  📸 提取关键帧（固定 30 帧，动态间隔）...`);
+
+    // 🔧 先删除旧的关键帧数据（防止重复累积）
+    await queries.keyframe.deleteByVideoId(video.id);
+    console.log(`  🗑️  已清除视频 ${video.id} 的旧关键帧数据`);
 
     const keyframesResult = await extractVideoKeyframes({
       videoPath,
@@ -1156,7 +1163,15 @@ ${transcriptionText}
 
   let projectStorylinesResult;
 
-  if (existingAnalysis && existingAnalysis.analyzedAt) {
+  // 如果强制重新分析，跳过增量逻辑
+  if (force) {
+    console.log(`\n🔄 [强制分析] force=true，跳过增量检查，执行完整分析`);
+    projectStorylinesResult = await geminiClient.analyzeProjectStorylines(
+      videos,
+      enhancedSummaries,
+      keyframesResults
+    );
+  } else if (existingAnalysis && existingAnalysis.analyzedAt) {
     // 已有项目分析，检查是否有新视频
     const analyzedAt = new Date(existingAnalysis.analyzedAt);
     const newVideosSinceLastAnalysis = videos.filter((v: any) => {
@@ -1210,14 +1225,54 @@ ${transcriptionText}
           keyframesResults
         );
       }
-    } else {
-      // 没有新视频或全部是新视频，使用完整分析
-      console.log(`ℹ️  [完整分析] 无已有分析或全部视频为新，执行完整分析`);
+    } else if (newVideosSinceLastAnalysis.length === videos.length) {
+      // 全部是新视频，使用完整分析
+      console.log(`🆕 [完整分析] 全部 ${videos.length} 集为新视频，执行完整分析`);
       projectStorylinesResult = await geminiClient.analyzeProjectStorylines(
         videos,
         enhancedSummaries,
         keyframesResults
       );
+    } else {
+      // 没有新视频，复用已有分析
+      console.log(`✅ [复用分析] 无新增视频，复用已有的项目分析数据`);
+      console.log(`📊 已有分析时间: ${existingAnalysis.analyzedAt}`);
+      console.log(`📊 主线剧情: ${existingAnalysis.mainPlot?.substring(0, 50)}...`);
+
+      // 获取完整的故事线数据
+      const existingStorylines = await queries.storyline.getByProjectId(projectId);
+      const storylinesWithSegments = await Promise.all(
+        existingStorylines.map(async (storyline: any) => {
+          const segments = await db
+            .select()
+            .from(schema.storylineSegments)
+            .where(eq(schema.storylineSegments.storylineId, storyline.id))
+            .orderBy(asc(schema.storylineSegments.segmentOrder));
+          return {
+            ...storyline,
+            segments,
+          };
+        })
+      );
+
+      // 构造结果
+      projectStorylinesResult = {
+        success: true,
+        data: {
+          mainPlot: existingAnalysis.mainPlot || '',
+          subplotCount: existingAnalysis.subplotCount || 0,
+          characterRelationships: existingAnalysis.characterRelationships
+            ? JSON.parse(existingAnalysis.characterRelationships as string)
+            : {},
+          foreshadowings: existingAnalysis.foreshadowings
+            ? JSON.parse(existingAnalysis.foreshadowings as string)
+            : [],
+          crossEpisodeHighlights: existingAnalysis.crossEpisodeHighlights
+            ? JSON.parse(existingAnalysis.crossEpisodeHighlights as string)
+            : [],
+          storylines: storylinesWithSegments,
+        },
+      };
     }
   } else {
     // 首次分析，使用完整分析

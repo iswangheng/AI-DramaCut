@@ -10,9 +10,10 @@
  * - 支持点击标记点快速跳转
  * - 支持拖拽进度条跳转
  * - 支持键盘快捷键控制
+ * - 支持外部控制跳转和播放
  */
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useImperativeHandle, forwardRef } from "react";
 import ReactPlayer from "react-player";
 import { Play, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,15 @@ interface HighlightPlayerProps {
   markers?: HighlightMarker[];         // 高光时刻标记
   onMarkerClick?: (marker: HighlightMarker) => void;  // 点击标记回调
   onProgress?: (currentTimeMs: number) => void;       // 进度回调
+  onReady?: () => void;                // 播放器就绪回调
   className?: string;                  // 自定义样式类
+}
+
+export interface HighlightPlayerRef {
+  seekTo: (timeMs: number) => void;
+  play: () => void;
+  pause: () => void;
+  togglePlay: () => void;
 }
 
 /**
@@ -48,13 +57,16 @@ export function formatMsToTime(ms: number): string {
 /**
  * 高光切片视频播放器
  */
-export function HighlightPlayer({
+export const HighlightPlayer = forwardRef<HighlightPlayerRef, HighlightPlayerProps>(({
   url,
   markers = [],
   onMarkerClick,
   onProgress,
+  onReady,
   className = "",
-}: HighlightPlayerProps) {
+}, ref) => {
+  console.log("🎬🎬🎬 HighlightPlayer 组件开始渲染:", { url, className });
+
   const playerRef = useRef<any>(null);
   const progressContainerRef = useRef<HTMLDivElement>(null);
 
@@ -63,14 +75,77 @@ export function HighlightPlayer({
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
+  const [isReady, setIsReady] = useState(false); // 播放器是否已就绪
+  const [loadError, setLoadError] = useState<string | null>(null); // 加载错误
+
+  // 组件挂载时输出日志
+  useEffect(() => {
+    console.log("🎬✅ HighlightPlayer 组件已挂载:", {
+      url,
+      markersCount: markers.length,
+      hasPlayerRef: !!playerRef.current,
+    });
+  }, [url, markers]);
+
+  // 暴露方法给父组件
+  useImperativeHandle(ref, () => ({
+    seekTo: (timeMs: number) => {
+      console.log("🎯 HighlightPlayer.seekTo 被调用:", {
+        timeMs,
+        isReady,
+        durationMs,
+        hasPlayerRef: !!playerRef.current,
+      });
+      if (playerRef.current && isReady) {
+        const timeInSeconds = timeMs / 1000;
+        playerRef.current.seekTo(timeInSeconds, "seconds");
+        setCurrentTimeMs(timeMs);
+        console.log("✅ seekTo 完成");
+      } else {
+        console.warn("⚠️ seekTo 失败：播放器未就绪");
+      }
+    },
+    play: () => {
+      console.log("▶️ HighlightPlayer.play 被调用:", {
+        isReady,
+        currentIsPlaying: isPlaying,
+      });
+      if (isReady) {
+        setIsPlaying(true);
+        console.log("✅ play 完成，设置 isPlaying = true");
+      } else {
+        console.warn("⚠️ play 失败：播放器未就绪");
+      }
+    },
+    pause: () => {
+      console.log("⏸️ HighlightPlayer.pause 被调用");
+      setIsPlaying(false);
+    },
+    togglePlay: () => {
+      if (isReady) {
+        setIsPlaying(!isPlaying);
+      }
+    },
+  }));
 
   /**
    * 处理播放器就绪
    */
   const handleReady = () => {
+    console.log("🎬 ReactPlayer handleReady 被调用");
     if (playerRef.current) {
       const duration = playerRef.current.getDuration();
       setDurationMs(duration * 1000);
+      setIsReady(true);
+      console.log('✅ HighlightPlayer 已就绪:', {
+        duration,
+        durationMs: duration * 1000,
+      });
+
+      // 通知父组件播放器已就绪
+      onReady?.();
+    } else {
+      console.error("❌ playerRef.current 为空");
     }
   };
 
@@ -148,21 +223,33 @@ export function HighlightPlayer({
     return () => window.removeEventListener("keydown", handleKeyPress);
   }, [currentTimeMs, durationMs]);
 
+  console.log("🎬🎬 HighlightPlayer 即将渲染到DOM:", {
+    isPlaying,
+    durationMs,
+    isReady,
+    url,
+  });
+
   return (
     <div className={`relative w-full ${className}`}>
       {/* 视频播放器 */}
       <div className="relative bg-black rounded-lg overflow-hidden">
         {/* ReactPlayer 隐藏原生控件 */}
-        <div className="aspect-[9/16] max-h-[600px]">
+        <div className="aspect-video max-h-[600px]">
           <ReactPlayer
             ref={playerRef as any}
-            {...{ url } as any}
+            url={url}
             playing={isPlaying}
-            controls={false}
+            controls={true}  // 临时启用原生控件测试
             width="100%"
             height="100%"
             onReady={handleReady}
             onProgress={handleProgress as any}
+            onError={(e) => {
+              console.error("❌ ReactPlayer 错误:", e);
+              setLoadError(e.toString() || "视频加载失败");
+              onReady?.();
+            }}
           />
         </div>
 
@@ -250,4 +337,6 @@ export function HighlightPlayer({
       </div>
     </div>
   );
-}
+});
+
+HighlightPlayer.displayName = "HighlightPlayer";

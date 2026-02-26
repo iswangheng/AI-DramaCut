@@ -23,9 +23,15 @@ export async function GET(
     // 获取关键帧列表
     const keyframes = await queries.keyframe.getByVideoId(videoId);
 
+    // 转换绝对路径为相对 URL（前端可以访问）
+    const keyframesWithUrls = keyframes.map(keyframe => ({
+      ...keyframe,
+      framePath: keyframe.framePath.split('/public/')[1] || keyframe.framePath,
+    }));
+
     return NextResponse.json({
       success: true,
-      data: keyframes,
+      data: keyframesWithUrls,
     });
   } catch (error) {
     console.error('获取关键帧失败:', error);

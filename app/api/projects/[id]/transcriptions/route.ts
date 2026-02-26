@@ -12,7 +12,7 @@ export async function GET(
     if (isNaN(projectId)) {
       return NextResponse.json({
         success: false,
-        error: '无效的项目 ID'
+        message: '无效的项目 ID'
       }, { status: 400 });
     }
 
@@ -90,7 +90,7 @@ export async function GET(
 
     return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : '获取转录文本失败',
+      message: error instanceof Error ? error.message : '获取转录文本失败',
       debug: {
         type: error.constructor.name,
         code: error.code

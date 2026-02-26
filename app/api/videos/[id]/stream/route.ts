@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createReadStream, statSync, existsSync } from "fs";
 import { join } from "path";
+import { queries } from "@/lib/db";
 
 /**
  * 视频流 API
@@ -25,9 +26,17 @@ export async function GET(
       );
     }
 
-    // TODO: 从数据库获取视频路径
-    // 目前暂时使用硬编码的路径，实际应该从数据库查询
-    const videoPath = `/Users/weilingkeji/360安全云盘同步版/000-海外/01-jisi/001-AI-DramaCut/data/uploads/${videoId === 4 ? "1770620671643-fxifyq" : "1770605390588-0gmlcn"}.mp4`;
+    // 从数据库获取视频路径
+    const video = await queries.video.getById(videoId);
+
+    if (!video) {
+      return NextResponse.json(
+        { success: false, error: "视频不存在" },
+        { status: 404 }
+      );
+    }
+
+    const videoPath = video.filePath;
 
     // 检查文件是否存在
     if (!existsSync(videoPath)) {

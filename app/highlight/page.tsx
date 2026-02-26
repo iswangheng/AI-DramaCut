@@ -13,6 +13,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { HighlightPlayer, formatMsToTime, type HighlightPlayerRef } from "@/components/highlight/highlight-player";
 import {
   Wand2,
   Plus,
@@ -23,18 +25,6 @@ import {
   Check,
   Loader2,
 } from "lucide-react";
-// import { HighlightPlayer, formatMsToTime } from "@/components/highlight/highlight-player";
-// import { formatMsToTime } from "@/components/highlight/highlight-player";
-
-// 临时复制 formatMsToTime 函数
-function formatMsToTime(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const milliseconds = ms % 1000;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(milliseconds).padStart(3, "0")}`;
-}
 
 interface HighlightClip {
   id: string;
@@ -157,7 +147,7 @@ function parseTimeToMs(timeStr: string): number {
 }
 
 function HighlightContent() {
-  const playerRef = useRef<any>(null);
+  const playerRef = useRef<HighlightPlayerRef>(null);
 
   // 状态
   const [clips, setClips] = useState<HighlightClip[]>([]);
@@ -168,20 +158,85 @@ function HighlightContent() {
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isDetecting, setIsDetecting] = useState(false);
-  const [currentVideoId, setCurrentVideoId] = useState<number | null>(11); // 默认视频ID（项目2的第一个视频）
+  const [currentVideoId, setCurrentVideoId] = useState<number | null>(null); // 改为null，等加载完数据后再设置
+  const [videoInfo, setVideoInfo] = useState<{ filename: string; filePath: string } | null>(null);
+  const [playerReady, setPlayerReady] = useState(false); // 播放器是否就绪
+
+  // 确认对话框状态
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    confirmText: string;
+    cancelText: string;
+    onConfirm: () => void;
+    onCancel?: () => void;
+    variant?: "default" | "destructive";
+  }>({
+    open: false,
+    title: "",
+    description: "",
+    confirmText: "",
+    cancelText: "",
+    onConfirm: () => {},
+  });
 
   // 加载高光数据
   const loadHighlights = async (videoId: number) => {
     try {
       setIsLoading(true);
-      const response = await fetch(`/api/videos/${videoId}/highlights`);
-      const result = await response.json();
 
-      if (result.success) {
-        setClips(result.data || []);
-        console.log(`✅ 加载了 ${result.count || 0} 个高光切片`);
+      // 并行加载高光数据和视频信息
+      const [highlightsRes, videoRes] = await Promise.all([
+        fetch(`/api/videos/${videoId}/highlights`),
+        fetch(`/api/videos/${videoId}`),
+      ]);
+
+      const highlightsResult = await highlightsRes.json();
+      const videoResult = await videoRes.json();
+
+      // 设置视频信息
+      if (videoResult.success && videoResult.data) {
+        setVideoInfo({
+          filename: videoResult.data.filename,
+          filePath: videoResult.data.filePath,
+        });
+      }
+
+      if (highlightsResult.success) {
+        // 转换数据库格式到前端格式
+        const transformedClips = (highlightsResult.data || []).map((item: any) => {
+          // 计算最终时长
+          const finalDurationMs = item.durationMs || (item.endMs && item.startMs ? item.endMs - item.startMs : 0);
+
+          return {
+            id: `highlight-${item.id}`,
+            name: `${item.category === 'conflict' ? '冲突爆发' :
+                    item.category === 'emotional' ? '情感高潮' :
+                    item.category === 'reversal' ? '剧情反转' :
+                    item.category === 'climax' ? '高潮时刻' : '精彩片段'} - ${formatMsToTime(item.startMs)}`,
+            sourceVideoId: String(item.videoId),
+            sourceVideoName: videoResult.data?.filename || `视频 ${item.videoId}`,
+            sourceEpisodeNumber: videoResult.data?.episodeNumber,
+            highlightMomentMs: item.startMs,
+            originalDurationMs: finalDurationMs,
+            startMs: item.startMs,
+            endMs: item.endMs || (item.startMs + finalDurationMs),
+            finalDurationMs: finalDurationMs, // 修复 NaNs 问题
+            crossesEpisode: false,
+            source: "ai" as const,
+            viralScore: item.viralScore ? Math.round(item.viralScore * 10) : undefined, // 转换为 0-100
+            reason: item.reason,
+            status: "pending" as const,
+            createdAt: new Date(item.createdAt),
+            updatedAt: new Date(item.updatedAt),
+          };
+        });
+
+        setClips(transformedClips);
+        console.log(`✅ 加载了 ${transformedClips.length} 个高光切片`);
       } else {
-        console.error('加载高光失败:', result.error);
+        console.error('加载高光失败:', highlightsResult.message);
       }
     } catch (error) {
       console.error('加载高光失败:', error);
@@ -192,10 +247,108 @@ function HighlightContent() {
 
   // 页面加载时获取高光数据
   useEffect(() => {
+    // 从clips中获取第一个视频ID，或者使用默认值
+    const initVideoId = async () => {
+      try {
+        // 尝试获取项目的第一个视频
+        const projectsRes = await fetch('/api/projects');
+        if (projectsRes.ok) {
+          const projectsData = await projectsRes.json();
+          if (projectsData.success && projectsData.data && projectsData.data.length > 0) {
+            // 获取第一个项目
+            const project = projectsData.data[0];
+            const videosRes = await fetch(`/api/projects/${project.id}/videos`);
+            if (videosRes.ok) {
+              const videosData = await videosRes.json();
+              if (videosData.success && videosData.data && videosData.data.length > 0) {
+                const firstVideo = videosData.data[0];
+                console.log("📹 找到第一个视频:", firstVideo.id, firstVideo.filename);
+                setCurrentVideoId(firstVideo.id);
+                return;
+              }
+            }
+          }
+        }
+
+        // 如果找不到，使用硬编码的视频ID
+        console.log("📹 使用默认视频ID: 11");
+        setCurrentVideoId(11);
+      } catch (error) {
+        console.error("加载视频列表失败:", error);
+        setCurrentVideoId(11);
+      }
+    };
+
+    initVideoId();
+  }, []); // 只在页面加载时执行一次
+
+  // 当currentVideoId变化时加载高光数据
+  useEffect(() => {
     if (currentVideoId) {
       loadHighlights(currentVideoId);
     }
   }, [currentVideoId]);
+
+  // 处理切片点击
+  const handleClipClick = (clip: HighlightClip) => {
+    console.log("🖱️ 点击切片:", clip.name);
+
+    setSelectedClip(clip);
+    setStartTime(formatMsToTime(clip.startMs));
+    setEndTime(formatMsToTime(clip.endMs));
+
+    // 如果播放器已就绪，立即播放
+    if (playerRef.current && playerReady) {
+      console.log("✅ 播放器已就绪，立即播放");
+      playerRef.current.seekTo(clip.startMs);
+      setTimeout(() => {
+        if (playerRef.current) {
+          playerRef.current.play();
+        }
+      }, 300);
+    } else if (playerReady && !playerRef.current) {
+      console.warn("⚠️ playerReady 为 true 但 playerRef 为空");
+    } else {
+      console.log("⏳ 播放器未就绪，等待就绪后播放");
+    }
+  };
+
+  // 当选择切片时，跳转并播放
+  useEffect(() => {
+    console.log("📍 useEffect 触发:", {
+      selectedClip: selectedClip?.name,
+      playerReady,
+      hasPlayerRef: !!playerRef.current,
+    });
+
+    if (selectedClip && playerReady && playerRef.current) {
+      console.log("🎬 useEffect: 开始播放切片:", selectedClip.name, "开始时间:", formatMsToTime(selectedClip.startMs));
+
+      // 更新时间输入框
+      setStartTime(formatMsToTime(selectedClip.startMs));
+      setEndTime(formatMsToTime(selectedClip.endMs));
+
+      // 立即跳转并播放
+      console.log("✅ useEffect: 调用 seekTo:", formatMsToTime(selectedClip.startMs));
+      playerRef.current.seekTo(selectedClip.startMs);
+
+      // 等待跳转完成后再播放
+      setTimeout(() => {
+        if (playerRef.current) {
+          console.log("✅ useEffect: 调用 play()");
+          playerRef.current.play();
+        } else {
+          console.error("❌ playerRef 在 setTimeout 中为空");
+        }
+      }, 500);
+    } else if (selectedClip && !playerReady) {
+      console.log("⏳ 切片已选择但播放器未就绪，等待播放器准备...");
+    } else if (!selectedClip) {
+      console.log("⏳ 没有选择的切片");
+    } else if (!playerRef.current) {
+      console.log("⏳ 播放器 ref 为空");
+    }
+  }, [selectedClip, playerReady]);
 
   // 生成高光标记点（从切片列表中提取）
   const highlightMarkers = clips.map(clip => ({
@@ -226,19 +379,43 @@ function HighlightContent() {
         console.log('✅ 高光检测任务已添加到队列:', result.data);
 
         // 提示用户任务已提交
-        alert('高光检测任务已添加到队列，请稍后刷新页面查看结果');
-
-        // 30秒后自动刷新数据
-        setTimeout(() => {
-          loadHighlights(currentVideoId);
-        }, 30000);
+        setConfirmDialog({
+          open: true,
+          title: "高光检测任务已提交",
+          description: "AI 正在分析视频，检测高光时刻。检测完成后会自动刷新列表，请稍候...",
+          confirmText: "知道了",
+          cancelText: "",
+          onConfirm: () => {
+            // 30秒后自动刷新数据
+            setTimeout(() => {
+              loadHighlights(currentVideoId);
+            }, 30000);
+          },
+          variant: "default",
+        });
       } else {
-        console.error('触发高光检测失败:', result.error);
-        alert(`触发高光检测失败: ${result.error}`);
+        console.error('触发高光检测失败:', result.message);
+        setConfirmDialog({
+          open: true,
+          title: "触发高光检测失败",
+          description: result.message || '触发高光检测失败',
+          confirmText: "知道了",
+          cancelText: "",
+          onConfirm: () => {},
+          variant: "destructive",
+        });
       }
     } catch (error) {
       console.error('触发高光检测失败:', error);
-      alert('触发高光检测失败，请查看控制台');
+      setConfirmDialog({
+        open: true,
+        title: "触发高光检测失败",
+        description: '触发高光检测失败，请查看控制台',
+        confirmText: "知道了",
+        cancelText: "",
+        onConfirm: () => {},
+        variant: "destructive",
+      });
     } finally {
       setIsDetecting(false);
     }
@@ -291,29 +468,34 @@ function HighlightContent() {
       setEndTime(newTimeStr);
     }
 
-    // 同时跳转播放器（仅当播放器已加载时）
-    if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
-      try {
-        playerRef.current.seekTo(newMs / 1000);
-      } catch (error) {
-        // 忽略播放器错误，因为现在播放器可能还未集成
-        console.debug('Player seekTo skipped:', error);
-      }
+    // 同时跳转播放器
+    if (playerRef.current) {
+      playerRef.current.seekTo(newMs);
     }
   };
 
   // 跳转到指定时间
   const handleSeekTo = (timeMs: number) => {
-    // 注意：HighlightPlayer 组件内部处理跳转
-    // 如果需要从外部控制，可以通过 ref 暴露方法
+    if (playerRef.current) {
+      playerRef.current.seekTo(timeMs);
+      playerRef.current.play();
+    }
     console.log("跳转到时间:", formatMsToTime(timeMs));
   };
 
   // 删除切片
   const handleDeleteClip = (clipId: string) => {
-    // TODO: 替换为自定义确认对话框
-    // 根据项目规范，不允许使用原生 confirm/alert
-    setClips(clips.filter((c) => c.id !== clipId));
+    setConfirmDialog({
+      open: true,
+      title: "确认删除切片",
+      description: "确定要删除这个切片吗？此操作不可撤销。",
+      confirmText: "确认删除",
+      cancelText: "取消",
+      onConfirm: () => {
+        setClips(clips.filter((c) => c.id !== clipId));
+      },
+      variant: "destructive",
+    });
   };
 
   // 添加到渲染队列（触发真实的渲染任务）
@@ -339,14 +521,38 @@ function HighlightContent() {
           )
         );
 
-        alert('渲染任务已添加到队列');
+        setConfirmDialog({
+          open: true,
+          title: "渲染任务已添加",
+          description: "切片已添加到渲染队列，请在任务管理中查看渲染进度。",
+          confirmText: "知道了",
+          cancelText: "",
+          onConfirm: () => {},
+          variant: "default",
+        });
       } else {
-        console.error('添加渲染任务失败:', result.error);
-        alert(`添加渲染任务失败: ${result.error}`);
+        console.error('添加渲染任务失败:', result.message);
+        setConfirmDialog({
+          open: true,
+          title: "添加渲染任务失败",
+          description: result.message || '添加渲染任务失败',
+          confirmText: "知道了",
+          cancelText: "",
+          onConfirm: () => {},
+          variant: "destructive",
+        });
       }
     } catch (error) {
       console.error('添加渲染任务失败:', error);
-      alert('添加渲染任务失败，请查看控制台');
+      setConfirmDialog({
+        open: true,
+        title: "添加渲染任务失败",
+        description: '添加渲染任务失败，请查看控制台',
+        confirmText: "知道了",
+        cancelText: "",
+        onConfirm: () => {},
+        variant: "destructive",
+      });
     }
   };
 
@@ -374,33 +580,108 @@ function HighlightContent() {
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-foreground">
-                  视频预览 {selectedClip && `(${selectedClip.sourceVideoName})`}
-                </h3>
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">
+                    视频预览 {selectedClip && `(${selectedClip.sourceVideoName})`}
+                  </h3>
+                  {selectedClip && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      正在播放：{selectedClip.name}
+                    </p>
+                  )}
+                  {!playerReady && currentVideoId && (
+                    <p className="text-xs text-yellow-600 mt-1">
+                      ⏳ 播放器加载中...
+                    </p>
+                  )}
+                  {playerReady && (
+                    <p className="text-xs text-green-600 mt-1">
+                      ✅ 播放器已就绪
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {/* 测试按钮 */}
+                  {playerReady && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        console.log("🧪 测试播放器");
+                        if (playerRef.current) {
+                          console.log("✅ playerRef 存在");
+                          playerRef.current.play();
+                        } else {
+                          console.error("❌ playerRef 为空");
+                        }
+                      }}
+                      className="cursor-pointer"
+                    >
+                      测试播放
+                    </Button>
+                  )}
+                  {selectedClip && (
+                    <Badge className="bg-blue-100 text-blue-700">
+                      播放中
+                    </Badge>
+                  )}
+                </div>
               </div>
 
               {/* 高光切片播放器 */}
-              {/* <HighlightPlayer
-                url="/sample-video.mp4" // TODO: 替换为实际视频URL
-                markers={highlightMarkers}
-                onMarkerClick={(marker) => {
-                  console.log("跳转到标记:", marker);
-                  // 可以在这里更新开始时间输入框
-                  setStartTime(formatMsToTime(marker.timeMs));
-                }}
-                onProgress={(timeMs) => {
-                  setCurrentTimeMs(timeMs);
-                }}
-                className="mx-auto max-w-[400px]"
-              /> */}
+              {currentVideoId ? (
+                <>
+                  {console.log("📍 准备渲染播放器:", {
+                    videoId: currentVideoId,
+                    videoUrl: `/api/videos/${currentVideoId}/stream`,
+                    playerReady,
+                    hasPlayerRef: !!playerRef.current,
+                  })}
+                  <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
+                    <p className="font-semibold mb-1">调试信息：</p>
+                    <p>videoId: {currentVideoId}</p>
+                    <p>videoUrl: /api/videos/{currentVideoId}/stream</p>
+                    <p>playerReady: {playerReady ? "✅" : "❌"}</p>
+                    <p>hasPlayerRef: {playerRef.current ? "✅" : "❌"}</p>
+                    <p>视频信息: {videoInfo?.filename || "加载中..."}</p>
+                    {videoInfo && (
+                      <p>文件路径: {videoInfo.filePath}</p>
+                    )}
+                  </div>
 
-              {/* 临时占位符 */}
-              <div className="flex items-center justify-center bg-black rounded-lg overflow-hidden aspect-[9/16] max-h-[600px]">
-                <div className="text-center text-white">
-                  <p className="text-lg">视频播放器区域</p>
-                  <p className="text-sm text-gray-400 mt-2">（播放器组件暂时禁用）</p>
+                  {/* 优先使用实际视频，如果失败则使用测试视频 */}
+                  <HighlightPlayer
+                    key={`player-${currentVideoId}`} // 添加key强制重新渲染
+                    url={`/api/videos/${currentVideoId}/stream`}
+                    markers={highlightMarkers}
+                    onMarkerClick={(marker) => {
+                      console.log("跳转到标记:", marker);
+                      // 更新开始时间输入框
+                      setStartTime(formatMsToTime(marker.timeMs));
+                      setEndTime(formatMsToTime(marker.timeMs + 30000)); // 默认30秒
+                    }}
+                    onProgress={(timeMs) => {
+                      setCurrentTimeMs(timeMs);
+                    }}
+                    onReady={() => {
+                      console.log("✅ 播放器已就绪");
+                      setPlayerReady(true);
+                    }}
+                    className="w-full"
+                  />
+                </>
+              ) : (
+                <div className="flex items-center justify-center bg-black rounded-lg overflow-hidden aspect-video max-h-[500px]">
+                  <div className="text-center text-white">
+                    <div className="text-6xl mb-4">📹</div>
+                    <p className="text-lg mb-2">正在加载视频...</p>
+                    <p className="text-sm text-gray-400">请稍候</p>
+                    <div className="mt-4 flex justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
 
@@ -421,6 +702,7 @@ function HighlightContent() {
                     variant="outline"
                     size="sm"
                     onClick={(e) => adjustTime("start", -1000, e)}
+                    className="cursor-pointer"
                   >
                     -1s
                   </Button>
@@ -428,6 +710,7 @@ function HighlightContent() {
                     variant="outline"
                     size="sm"
                     onClick={(e) => adjustTime("start", -100, e)}
+                    className="cursor-pointer"
                   >
                     -100ms
                   </Button>
@@ -445,6 +728,7 @@ function HighlightContent() {
                     variant="outline"
                     size="sm"
                     onClick={(e) => adjustTime("start", 100, e)}
+                    className="cursor-pointer"
                   >
                     +100ms
                   </Button>
@@ -452,6 +736,7 @@ function HighlightContent() {
                     variant="outline"
                     size="sm"
                     onClick={(e) => adjustTime("start", 1000, e)}
+                    className="cursor-pointer"
                   >
                     +1s
                   </Button>
@@ -466,6 +751,7 @@ function HighlightContent() {
                     variant="outline"
                     size="sm"
                     onClick={(e) => adjustTime("end", -1000, e)}
+                    className="cursor-pointer"
                   >
                     -1s
                   </Button>
@@ -473,6 +759,7 @@ function HighlightContent() {
                     variant="outline"
                     size="sm"
                     onClick={(e) => adjustTime("end", -100, e)}
+                    className="cursor-pointer"
                   >
                     -100ms
                   </Button>
@@ -490,6 +777,7 @@ function HighlightContent() {
                     variant="outline"
                     size="sm"
                     onClick={(e) => adjustTime("end", 100, e)}
+                    className="cursor-pointer"
                   >
                     +100ms
                   </Button>
@@ -497,6 +785,7 @@ function HighlightContent() {
                     variant="outline"
                     size="sm"
                     onClick={(e) => adjustTime("end", 1000, e)}
+                    className="cursor-pointer"
                   >
                     +1s
                   </Button>
@@ -532,7 +821,7 @@ function HighlightContent() {
                       e.stopPropagation();
                       handleAddManualClip();
                     }}
-                    className="gap-2"
+                    className="gap-2 cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
                     手动新增切片
@@ -549,7 +838,7 @@ function HighlightContent() {
           <Card>
             <CardContent className="p-4">
               <Button
-                className="w-full gap-2"
+                className="w-full gap-2 cursor-pointer"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleAIGenerate();
@@ -587,14 +876,15 @@ function HighlightContent() {
                   variant="outline"
                   size="sm"
                   onClick={(e) => e.stopPropagation()}
+                  className="cursor-pointer"
                 >
                   {selectedClip ? "已选择" : "筛选"} ▼
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>全部</DropdownMenuItem>
-                <DropdownMenuItem>AI 生成</DropdownMenuItem>
-                <DropdownMenuItem>手动新增</DropdownMenuItem>
+                <DropdownMenuItem className="cursor-pointer">全部</DropdownMenuItem>
+                <DropdownMenuItem className="cursor-pointer">AI 生成</DropdownMenuItem>
+                <DropdownMenuItem className="cursor-pointer">手动新增</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -626,16 +916,23 @@ function HighlightContent() {
                 key={clip.id}
                 className={`cursor-pointer transition-base ${
                   selectedClip?.id === clip.id
-                    ? "ring-2 ring-primary"
+                    ? "ring-2 ring-primary bg-primary/5"
                     : "hover:shadow-md"
                 }`}
-                onClick={() => setSelectedClip(clip)}
+                onClick={() => handleClipClick(clip)}
               >
                 <CardContent className="p-4">
                   {/* 来源标签 */}
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
+                        {/* 播放指示器 */}
+                        {selectedClip?.id === clip.id && (
+                          <div className="flex items-center gap-1 text-primary text-xs font-medium animate-pulse">
+                            <Play className="w-3 h-3 fill-current" />
+                            播放中
+                          </div>
+                        )}
                         {clip.source === "ai" && (
                           <Badge className="bg-purple-100 text-purple-700">
                             AI 生成
@@ -676,12 +973,14 @@ function HighlightContent() {
                           variant="ghost"
                           size="sm"
                           onClick={(e) => e.stopPropagation()}
+                          className="cursor-pointer"
                         >
                           ...
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
+                          className="cursor-pointer"
                           onClick={(e) => {
                             e.stopPropagation();
                             setStartTime(formatMsToTime(clip.startMs));
@@ -694,6 +993,7 @@ function HighlightContent() {
                         </DropdownMenuItem>
                         {clip.status === "pending" && (
                           <DropdownMenuItem
+                            className="cursor-pointer"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleAddToQueue(clip.id);
@@ -704,7 +1004,7 @@ function HighlightContent() {
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuItem
-                          className="text-red-600"
+                          className="text-red-600 cursor-pointer"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDeleteClip(clip.id);
@@ -742,6 +1042,19 @@ function HighlightContent() {
           </div>
         </div>
       </div>
+
+      {/* 确认对话框 */}
+      <ConfirmDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={confirmDialog.onCancel}
+        variant={confirmDialog.variant}
+      />
     </div>
   );
 }

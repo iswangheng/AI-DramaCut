@@ -51,7 +51,7 @@ export default function TranscriptionsPage({ params }: { params: Promise<{ id: s
       if (data.success && data.data) {
         setTranscriptions(data.data);
       } else {
-        setError(data.error || '加载转录文本失败');
+        setError(data.message || '加载转录文本失败');
       }
     } catch (err) {
       console.error('加载转录文本失败:', err);

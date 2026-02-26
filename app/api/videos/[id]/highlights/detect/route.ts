@@ -17,7 +17,7 @@ export async function POST(
 
     if (isNaN(videoId)) {
       return NextResponse.json(
-        { success: false, error: '无效的视频 ID' },
+        { success: false, message: '无效的视频 ID' },
         { status: 400 }
       );
     }
@@ -27,7 +27,7 @@ export async function POST(
 
     if (!video) {
       return NextResponse.json(
-        { success: false, error: '视频不存在' },
+        { success: false, message: '视频不存在' },
         { status: 404 }
       );
     }
@@ -37,7 +37,7 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          error: `视频状态不正确，当前状态: ${video.status}，需要状态: ready`,
+          message: `视频状态不正确，当前状态: ${video.status}，需要状态: ready`,
         },
         { status: 400 }
       );
@@ -72,7 +72,7 @@ export async function POST(
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : '触发高光检测失败',
+        message: error instanceof Error ? error.message : '触发高光检测失败',
       },
       { status: 500 }
     );

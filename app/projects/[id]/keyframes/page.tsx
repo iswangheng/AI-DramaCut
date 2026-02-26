@@ -156,7 +156,7 @@ export default function KeyframesPage({ params }: { params: Promise<{ id: string
           setSelectedVideo(data.data[0].video.id);
         }
       } else {
-        setError(data.error || '加载关键帧失败');
+        setError(data.message || '加载关键帧失败');
       }
     } catch (err) {
       console.error('加载关键帧失败:', err);

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, use, useEffect } from "react";
+import { useState, use, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { MainLayout } from "@/components/main-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Clock, Eye, Sparkles, TreeDeciduous, Loader2, RefreshCw, Play, Image, FileText } from "lucide-react";
+import { ArrowLeft, Clock, Eye, Sparkles, TreeDeciduous, Loader2, RefreshCw, Play, Image, FileText, ZoomIn } from "lucide-react";
 import { VideoClipPlayer } from "@/components/video-clip-player";
 
 interface Shot {
@@ -93,6 +93,95 @@ function VideoDetailContent({ videoId }: { videoId: string }) {
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectProgress, setDetectProgress] = useState(0);
   const [detectError, setDetectError] = useState<string | null>(null);
+
+  // 关键帧预览组件
+  function KeyframePreview({
+    src,
+    alt,
+    timestamp,
+    frameNumber,
+  }: {
+    src: string;
+    alt: string;
+    timestamp: string;
+    frameNumber: number;
+  }) {
+    const [isHovered, setIsHovered] = useState(false);
+    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const cardRef = useRef<HTMLDivElement>(null);
+
+    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!cardRef.current) return;
+      const rect = cardRef.current.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top;
+      setPosition({ x, y });
+    };
+
+    return (
+      <div
+        ref={cardRef}
+        className="relative"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onMouseMove={handleMouseMove}
+      >
+        {/* 原始关键帧缩略图 */}
+        <div className="relative aspect-video bg-muted rounded overflow-hidden cursor-pointer group">
+          <img
+            src={`/${src}`}
+            alt={alt}
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+          />
+          {/* Hover 提示图标 */}
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300 flex items-center justify-center opacity-0 group-hover:opacity-100">
+            <ZoomIn className="w-8 h-8 text-white drop-shadow-lg" />
+          </div>
+        </div>
+
+        {/* 悬浮预览浮层 */}
+        {isHovered && (
+          <div
+            className="fixed z-50 pointer-events-none"
+            style={{
+              left: `${Math.min(position.x, window.innerWidth - 400)}px`,
+              top: `${position.y}px`,
+              transform: 'translateY(-50%) translateY(-20px)',
+            }}
+          >
+            <div className="relative bg-black rounded-lg shadow-[0_20px_60px_rgb(0,0,0,0.5)] border border-white/10 overflow-hidden">
+              {/* 完整图片 */}
+              <div className="relative" style={{ width: '640px', height: '360px' }}>
+                <img
+                  src={`/${src}`}
+                  alt={alt}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+
+              {/* 图片信息条 */}
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-4 py-3">
+                <div className="flex items-center justify-between text-white">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-white/90">帧 #{frameNumber}</span>
+                      <span className="px-2 py-0.5 bg-blue-500 rounded text-xs font-medium">
+                        {timestamp}
+                      </span>
+                    </div>
+                    <div className="text-xs text-white/60">
+                      原始分辨率图片预览
+                    </div>
+                  </div>
+                  <ZoomIn className="w-5 h-5 text-white/60" />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // 视频播放器状态
   const [playingClip, setPlayingClip] = useState<{
@@ -202,8 +291,8 @@ function VideoDetailContent({ videoId }: { videoId: string }) {
         // 立即检查一次
         await pollTaskStatus();
       } else {
-        console.error('触发高光检测失败:', result.error);
-        setDetectError(result.error);
+        console.error('触发高光检测失败:', result.message);
+        setDetectError(result.message);
         setIsDetecting(false);
       }
     } catch (error) {
@@ -671,31 +760,29 @@ function VideoDetailContent({ videoId }: { videoId: string }) {
                     {keyframes.map((keyframe) => (
                       <div
                         key={keyframe.id}
-                        className="group relative aspect-video bg-muted rounded-lg overflow-hidden cursor-pointer hover:shadow-lg transition-all"
-                        onClick={() => handlePlayClip(keyframe.timestampMs, keyframe.timestampMs + 3000)}
+                        className="space-y-2"
                       >
-                        {/* 关键帧图片 */}
-                        <img
+                        {/* 关键帧图片预览（悬浮显示大图） */}
+                        <KeyframePreview
                           src={keyframe.framePath}
                           alt={`关键帧 ${keyframe.frameNumber}`}
-                          className="w-full h-full object-cover"
+                          timestamp={formatTime(keyframe.timestampMs)}
+                          frameNumber={keyframe.frameNumber}
                         />
 
-                        {/* 悬浮信息 */}
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <div className="text-center text-white">
-                            <p className="text-sm font-medium">
+                        {/* 时间戳和帧号 */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-medium text-muted-foreground">
+                              #{keyframe.frameNumber}
+                            </span>
+                            <span className="text-blue-600 font-medium">
                               {formatTime(keyframe.timestampMs)}
-                            </p>
-                            <p className="text-xs text-gray-300">
-                              帧 {keyframe.frameNumber}
-                            </p>
+                            </span>
                           </div>
-                        </div>
-
-                        {/* 播放按钮 */}
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Play className="w-8 h-8 text-white" />
+                          <div className="text-xs text-muted-foreground">
+                            {Math.floor(keyframe.timestampMs / 1000)}s
+                          </div>
                         </div>
                       </div>
                     ))}

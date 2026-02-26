@@ -100,6 +100,11 @@ export function VideoClipPlayer({
     setIsPlaying(!isPlaying);
   };
 
+  // 处理视频区域点击
+  const handleVideoClick = () => {
+    togglePlay();
+  };
+
   // 跳转到指定时间
   const handleSeek = (value: number[]) => {
     const video = videoRef.current;
@@ -135,8 +140,14 @@ export function VideoClipPlayer({
   const clampedProgress = Math.max(0, Math.min(100, progress));
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-background rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto">
+    <div
+      className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 cursor-pointer"
+      onClick={onClose}
+    >
+      <div
+        className="bg-background rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto cursor-default"
+        onClick={(e) => e.stopPropagation()} // 阻止点击事件冒泡，避免关闭弹窗
+      >
         {/* 头部 */}
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="text-lg font-semibold">视频片段播放</h3>
@@ -152,7 +163,10 @@ export function VideoClipPlayer({
 
         {/* 视频播放器 */}
         <div className="p-4">
-          <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+          <div
+            className="relative bg-black rounded-lg overflow-hidden aspect-video group cursor-pointer"
+            onClick={handleVideoClick}
+          >
             <video
               ref={videoRef}
               className="w-full h-full"
@@ -160,6 +174,39 @@ export function VideoClipPlayer({
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
             />
+
+            {/* 中心播放/暂停图标覆盖层 */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div
+                className={`
+                  flex items-center justify-center w-20 h-20 rounded-full
+                  bg-black/50 backdrop-blur-sm
+                  transition-all duration-200
+                  ${isPlaying ? 'opacity-0 scale-90' : 'opacity-100 scale-100'}
+                  group-hover:opacity-100 group-hover:scale-105
+                `}
+              >
+                {isPlaying ? (
+                  <Pause className="w-8 h-8 text-white" fill="white" />
+                ) : (
+                  <Play className="w-8 h-8 text-white ml-1" fill="white" />
+                )}
+              </div>
+            </div>
+
+            {/* 悬停时显示的提示文字 */}
+            <div
+              className={`
+                absolute bottom-4 left-1/2 -translate-x-1/2
+                px-3 py-1.5 rounded-full bg-black/70 backdrop-blur-sm
+                text-white text-xs font-medium
+                transition-opacity duration-200
+                ${isPlaying ? 'opacity-0' : 'opacity-100'}
+                group-hover:opacity-100
+              `}
+            >
+              点击视频{isPlaying ? '暂停' : '播放'}
+            </div>
           </div>
 
           {/* 控制栏 */}
@@ -184,17 +231,18 @@ export function VideoClipPlayer({
             <div className="flex items-center justify-between">
               <Button
                 onClick={togglePlay}
-                size="lg"
+                size="sm"
+                variant="outline"
                 className="gap-2 cursor-pointer"
               >
                 {isPlaying ? (
                   <>
-                    <Pause className="w-5 h-5" />
+                    <Pause className="w-4 h-4" />
                     暂停
                   </>
                 ) : (
                   <>
-                    <Play className="w-5 h-5" />
+                    <Play className="w-4 h-4" />
                     {isEnded ? "重播" : "播放"}
                   </>
                 )}

@@ -10,13 +10,14 @@ import { Progress } from "@/components/ui/progress";
 import { UploadVideoDialog } from "@/components/upload-video-dialog";
 import { EditProjectDialog } from "@/components/edit-project-dialog";
 import { EditVideoDialog } from "@/components/edit-video-dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ArrowLeft, Upload, MoreVertical, Trash2, Eye, Edit, TreeDeciduous, Loader2, BarChart3, ImageIcon, FileText } from "lucide-react";
+import { ArrowLeft, Upload, MoreVertical, Trash2, Eye, Edit, TreeDeciduous, Loader2, BarChart3, ImageIcon, FileText, Info } from "lucide-react";
 import type { Video } from "@/lib/db/schema";
 
 interface Project {
@@ -41,6 +42,25 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
+
+  // 确认对话框状态
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    confirmText: string;
+    cancelText: string;
+    onConfirm: () => void;
+    onCancel?: () => void;
+    variant?: "default" | "destructive";
+  }>({
+    open: false,
+    title: "",
+    description: "",
+    confirmText: "",
+    cancelText: "",
+    onConfirm: () => {},
+  });
 
   // 查看视频详情
   const handleViewVideo = (videoId: number) => {
@@ -121,26 +141,48 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
     }
   };
 
-  const handleDeleteVideo = async (videoId: number) => {
-    if (!confirm("确定要删除这个视频吗？")) {
-      return;
-    }
+  const handleDeleteVideo = (videoId: number) => {
+    setConfirmDialog({
+      open: true,
+      title: "确认删除视频",
+      description: "确定要删除这个视频吗？此操作不可撤销。",
+      confirmText: "确认删除",
+      cancelText: "取消",
+      onConfirm: async () => {
+        try {
+          const response = await fetch(`/api/videos/${videoId}`, {
+            method: 'DELETE',
+          });
+          const data = await response.json();
 
-    try {
-      const response = await fetch(`/api/videos/${videoId}`, {
-        method: 'DELETE',
-      });
-      const data = await response.json();
-
-      if (data.success) {
-        // 重新加载视频列表
-        await loadData();
-      } else {
-        alert(data.message || "删除视频失败");
-      }
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "删除视频失败");
-    }
+          if (data.success) {
+            // 重新加载视频列表
+            await loadData();
+          } else {
+            setConfirmDialog({
+              open: true,
+              title: "删除失败",
+              description: data.message || "删除视频失败",
+              confirmText: "知道了",
+              cancelText: "",
+              onConfirm: () => {},
+              variant: "destructive",
+            });
+          }
+        } catch (err) {
+          setConfirmDialog({
+            open: true,
+            title: "删除失败",
+            description: err instanceof Error ? err.message : "删除视频失败",
+            confirmText: "知道了",
+            cancelText: "",
+            onConfirm: () => {},
+            variant: "destructive",
+          });
+        }
+      },
+      variant: "destructive",
+    });
   };
 
   const handleEditVideo = (video: Video) => {
@@ -149,44 +191,107 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
   };
 
   // 分析项目故事线
-  const handleAnalyzeStorylines = async () => {
+  const handleAnalyzeStorylines = async (forceOrEvent?: boolean | React.MouseEvent) => {
     if (!project) return;
+
+    // 如果是事件对象，忽略它并使用默认值 false
+    const force = typeof forceOrEvent === 'boolean' ? forceOrEvent : false;
 
     // 检查是否所有视频都有集数
     const videosWithoutEpisode = videos.filter(v => !v.episodeNumber);
     if (videosWithoutEpisode.length > 0) {
-      alert(`以下视频缺少集数信息，无法进行项目级分析：\n${videosWithoutEpisode.map(v => v.filename).join('\n')}\n\n请先为这些视频设置集数。`);
+      setConfirmDialog({
+        open: true,
+        title: "部分视频缺少集数信息",
+        description: `以下视频缺少集数信息，无法进行项目级分析：\n\n${videosWithoutEpisode.map(v => v.filename).join('\n')}\n\n请先为这些视频设置集数。`,
+        confirmText: "知道了",
+        cancelText: "",
+        onConfirm: () => {},
+        variant: "default",
+      });
       return;
     }
 
     if (videos.length < 2) {
-      alert('至少需要 2 个视频才能进行项目级故事线分析。');
+      setConfirmDialog({
+        open: true,
+        title: "视频数量不足",
+        description: "至少需要 2 个视频才能进行项目级故事线分析。",
+        confirmText: "知道了",
+        cancelText: "",
+        onConfirm: () => {},
+        variant: "default",
+      });
       return;
     }
 
     setAnalyzing(true);
 
     try {
-      // 调用分析 API（异步任务）
-      const response = await fetch(`/api/projects/${project.id}/analyze-storylines`, {
+      // 使用 URL 参数中的 projectId（更可靠）
+      const response = await fetch(`/api/projects/${projectId}/analyze-storylines`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ force }),
       });
 
       const data = await response.json();
 
       if (data.success && data.data) {
+        // 检查是否有已有数据
+        if (data.data.hasExistingData && !force) {
+          setAnalyzing(false);
+
+          // 已有数据，询问是否覆盖
+          setConfirmDialog({
+            open: true,
+            title: "重新分析项目",
+            description: `该项目已有分析数据（分析于 ${new Date(data.data.existingData.analyzedAt).toLocaleString('zh-CN')}）\n\n主线剧情：${data.data.existingData.mainPlot?.substring(0, 100)}...`,
+            confirmText: "重新分析",
+            cancelText: "查看已有结果",
+            onConfirm: async () => {
+              setAnalyzing(true);
+              await handleAnalyzeStorylines(true);
+            },
+            onCancel: () => {
+              // 用户选择查看已有结果，直接跳转
+              router.push(`/projects/${projectId}/storylines`);
+            },
+            variant: "default",
+          });
+          return;
+        }
+
         const { jobId, resultsUrl } = data.data;
 
         // 立即重定向到结果页面，带上 jobId
         router.push(`${resultsUrl}?jobId=${jobId}`);
       } else {
-        alert(data.error || '启动分析任务失败');
         setAnalyzing(false);
+        setConfirmDialog({
+          open: true,
+          title: "启动分析任务失败",
+          description: data.message || '启动分析任务失败',
+          confirmText: "知道了",
+          cancelText: "",
+          onConfirm: () => {},
+          variant: "destructive",
+        });
       }
     } catch (err) {
       console.error('启动分析任务失败:', err);
-      alert(err instanceof Error ? err.message : '启动分析任务失败');
       setAnalyzing(false);
+      setConfirmDialog({
+        open: true,
+        title: "启动分析任务失败",
+        description: err instanceof Error ? err.message : '启动分析任务失败',
+        confirmText: "知道了",
+        cancelText: "",
+        onConfirm: () => {},
+        variant: "destructive",
+      });
     }
   };
 
@@ -438,6 +543,18 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
         onSuccess={loadData}
+      />
+
+      {/* 确认对话框 */}
+      <ConfirmDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        onConfirm={confirmDialog.onConfirm}
+        variant={confirmDialog.variant}
       />
     </div>
   );

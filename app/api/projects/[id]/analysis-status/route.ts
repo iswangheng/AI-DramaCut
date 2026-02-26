@@ -26,7 +26,7 @@ export async function GET(
 
     if (isNaN(projectId)) {
       return NextResponse.json(
-        { success: false, error: "无效的项目 ID" },
+        { success: false, message: "无效的项目 ID" },
         { status: 400 }
       );
     }
@@ -64,7 +64,7 @@ export async function GET(
 
     if (!queueJob) {
       return NextResponse.json(
-        { success: false, error: "没有找到相关任务" },
+        { success: false, message: "没有找到相关任务" },
         { status: 404 }
       );
     }
@@ -133,7 +133,7 @@ export async function GET(
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "获取分析状态失败",
+        message: error instanceof Error ? error.message : "获取分析状态失败",
       },
       { status: 500 }
     );

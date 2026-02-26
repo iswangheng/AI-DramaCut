@@ -289,7 +289,7 @@ function StorylinesPageContent({ projectId }: { projectId: string }) {
       if (storylinesResult.success && storylinesResult.data) {
         setStorylinesData(storylinesResult.data);
       } else {
-        setError(storylinesResult.error || '加载故事线失败');
+        setError(storylinesResult.message || '加载故事线失败');
       }
 
       if (shotsResult.success && shotsResult.data) {
