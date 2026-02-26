@@ -52,9 +52,20 @@ export interface TranscribeOptions {
  */
 async function hasGPUSupport(): Promise<boolean> {
   try {
-    // 方法 1: 检查 nvidia-smi 命令是否可用
     const { exec: execCheck } = await import('child_process');
 
+    // 检查是否是 Mac（Mac 不支持 CUDA，应该使用 CPU 或 MPS）
+    try {
+      const { stdout: platformStdout } = await execCheck('uname');
+      if (platformStdout.toString().includes('Darwin')) {
+        console.log('ℹ️  检测到 macOS 系统，使用 CPU 模式（Mac 不支持 CUDA）');
+        return false;
+      }
+    } catch {
+      // 无法检测平台，继续检查 CUDA
+    }
+
+    // 方法 1: 检查 nvidia-smi 命令是否可用（Linux/Windows）
     try {
       await execCheck('nvidia-smi --query-gpu=name --format=csv,noheader');
       console.log('✅ 检测到 NVIDIA GPU');
@@ -86,6 +97,16 @@ async function hasGPUSupport(): Promise<boolean> {
  * 根据硬件自动选择最优配置
  */
 async function getOptimalConfig(): Promise<{ model: string; device: 'cpu' | 'cuda' }> {
+  // 🔧 临时强制使用 CPU 模式（Mac 兼容性修复）
+  // TODO: 等 GPU 检测稳定后移除此强制设置
+  console.log('ℹ️  当前使用 CPU 模式（Mac 兼容）');
+
+  return {
+    model: 'tiny',    // CPU 使用 tiny 模型
+    device: 'cpu',
+  };
+
+  /* GPU 自动检测代码（暂时禁用）
   const hasGPU = await hasGPUSupport();
 
   if (hasGPU) {
@@ -101,6 +122,7 @@ async function getOptimalConfig(): Promise<{ model: string; device: 'cpu' | 'cud
       device: 'cpu',
     };
   }
+  */
 }
 
 /**

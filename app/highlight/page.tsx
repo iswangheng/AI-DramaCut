@@ -168,7 +168,7 @@ function HighlightContent() {
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isDetecting, setIsDetecting] = useState(false);
-  const [currentVideoId, setCurrentVideoId] = useState<number | null>(4); // 默认视频ID
+  const [currentVideoId, setCurrentVideoId] = useState<number | null>(11); // 默认视频ID（项目2的第一个视频）
 
   // 加载高光数据
   const loadHighlights = async (videoId: number) => {

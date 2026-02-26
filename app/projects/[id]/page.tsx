@@ -16,7 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ArrowLeft, Upload, MoreVertical, Trash2, Eye, Edit, TreeDeciduous, Loader2, BarChart3 } from "lucide-react";
+import { ArrowLeft, Upload, MoreVertical, Trash2, Eye, Edit, TreeDeciduous, Loader2, BarChart3, ImageIcon, FileText } from "lucide-react";
 import type { Video } from "@/lib/db/schema";
 
 interface Project {
@@ -298,6 +298,22 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
         >
           <BarChart3 className="w-4 h-4" />
           查看分析结果
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => router.push(`/projects/${project.id}/keyframes`)}
+          className="gap-2 cursor-pointer"
+        >
+          <ImageIcon className="w-4 h-4" />
+          关键帧
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => router.push(`/projects/${project.id}/transcriptions`)}
+          className="gap-2 cursor-pointer"
+        >
+          <FileText className="w-4 h-4" />
+          音频转录
         </Button>
       </div>
 

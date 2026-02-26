@@ -113,6 +113,8 @@ function StorylinesPageContent({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
+  const [analyzeSteps, setAnalyzeSteps] = useState<string[]>([]); // 详细步骤信息
+  const [currentStep, setCurrentStep] = useState<string>(''); // 当前正在执行的步骤
   const [jobId, setJobId] = useState<string | null>(null);
   const [storylinesData, setStorylinesData] = useState<ProjectAnalysisResponse | null>(null);
   const [shotsData, setShotsData] = useState<{ totalShots: number; shotsByVideo: VideoWithShots[] } | null>(null);
@@ -139,11 +141,16 @@ function StorylinesPageContent({ projectId }: { projectId: string }) {
         const response = await fetch(`/api/projects/${projectId}/analysis-status`);
         const data = await response.json();
 
+        console.log('📊 [DEBUG] API 返回数据:', data);
+
         if (data.success && data.data) {
           const { status, jobId: runningJobId, progress } = data.data;
 
+          console.log('📊 [DEBUG] 状态:', status, 'JobId:', runningJobId, '进度:', progress);
+
           // 如果有正在运行或最近运行的任务
           if (status === 'active' || status === 'waiting' || status === 'completed') {
+            console.log('✅ [DEBUG] 检测到任务，设置 analyzing=true');
             setJobId(runningJobId);
             setAnalyzeProgress(progress || 0);
 
@@ -158,6 +165,7 @@ function StorylinesPageContent({ projectId }: { projectId: string }) {
           }
         }
 
+        console.log('⚠️ [DEBUG] 没有检测到运行中的任务');
         // 没有正在运行的任务，加载数据
         await loadAllData();
       } catch (err) {
@@ -169,6 +177,66 @@ function StorylinesPageContent({ projectId }: { projectId: string }) {
 
     checkForRunningTask();
   }, [projectId]);
+
+  // WebSocket 监听详细进度
+  useEffect(() => {
+    if (!jobId) return;
+
+    // 建立 WebSocket 连接
+    const ws = new WebSocket(`ws://localhost:3001`);
+
+    ws.onopen = () => {
+      console.log('🔗 WebSocket 已连接');
+      // 订阅任务进度
+      ws.send(JSON.stringify({
+        type: 'progress',
+        data: { jobId }
+      }));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        console.log('📨 [WebSocket] 收到消息:', message);
+
+        if (message.type === 'progress' && message.data) {
+          const { progress, message: stepMessage } = message.data;
+
+          // 更新进度百分比
+          if (progress !== undefined) {
+            setAnalyzeProgress(progress);
+          }
+
+          // 更新当前步骤
+          if (stepMessage) {
+            setCurrentStep(stepMessage);
+            // 添加到步骤列表（只保留最近 20 条）
+            setAnalyzeSteps(prev => {
+              const newSteps = [...prev, stepMessage];
+              return newSteps.slice(-20);
+            });
+          }
+        }
+      } catch (error) {
+        console.error('解析 WebSocket 消息失败:', error);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket 错误:', error);
+    };
+
+    ws.onclose = () => {
+      console.log('🔌 WebSocket 已断开');
+    };
+
+    // 清理函数
+    return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
+  }, [jobId]);
 
   // 轮询分析状态
   const pollAnalysisStatus = async (jobId: string) => {
@@ -300,6 +368,39 @@ function StorylinesPageContent({ projectId }: { projectId: string }) {
                   />
                 </div>
               </div>
+
+              {/* 当前步骤 */}
+              {currentStep && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100 flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {currentStep}
+                  </p>
+                </div>
+              )}
+
+              {/* 详细步骤列表 */}
+              {analyzeSteps.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    处理步骤（最近 {analyzeSteps.length} 条）
+                  </p>
+                  <div className="max-h-60 overflow-y-auto space-y-1 pr-2">
+                    {analyzeSteps.slice().reverse().map((step, index) => (
+                      <div
+                        key={index}
+                        className="text-xs p-2 bg-muted/50 rounded flex items-start gap-2"
+                      >
+                        <span className="text-muted-foreground mt-0.5">
+                          {analyzeSteps.length - index}.
+                        </span>
+                        <span className="flex-1">{step}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
                 <p className="text-sm text-blue-900 dark:text-blue-100">
                   Gemini AI 正在分析所有视频，识别镜头、高光时刻和跨集故事线。

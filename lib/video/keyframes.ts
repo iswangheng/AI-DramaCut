@@ -15,9 +15,9 @@ export interface ExtractKeyframesOptions {
   videoPath: string;
   /** 输出目录（默认：public/keyframes/{videoId}） */
   outputDir?: string;
-  /** 提取帧数（默认：根据时长自动计算） */
+  /** 提取帧数（默认：30 帧，固定帧数，动态间隔） */
   frameCount?: number;
-  /** 采样间隔（秒，默认：3 秒） */
+  /** 采样间隔（秒，已废弃，请使用 frameCount 控制帧数） */
   intervalSeconds?: number;
   /** 输出文件名前缀（默认：keyframe） */
   filenamePrefix?: string;
@@ -38,6 +38,12 @@ export interface KeyframesResult {
 /**
  * 从视频中均匀提取关键帧
  *
+ * ✅ 策略：固定帧数，动态间隔
+ * - 所有视频提取相同的帧数（默认 30 帧）
+ * - 根据视频时长自动计算间隔，保证均匀分布
+ * - 长视频：间隔较大（避免过多帧）
+ * - 短视频：间隔较小（保证足够密度）
+ *
  * @param options - 提取选项
  * @returns 关键帧文件路径和时间戳
  */
@@ -47,8 +53,7 @@ export async function extractKeyframes(
   const {
     videoPath,
     outputDir,
-    frameCount,
-    intervalSeconds = 3,  // 默认每 3 秒一帧
+    frameCount = 30,  // ✅ 默认固定 30 帧
     filenamePrefix = 'keyframe'
   } = options;
 
@@ -64,13 +69,10 @@ export async function extractKeyframes(
   // 使用 FFmpeg 获取视频时长
   const duration = await getVideoDuration(videoPath);
 
-  // 如果指定了 frameCount，使用它；否则根据间隔计算
-  const actualFrameCount = frameCount || Math.floor(duration / (intervalSeconds * 1000));
+  // ✅ 动态计算间隔：根据视频时长和目标帧数
+  const intervalMs = Math.floor(duration / (frameCount + 1));
 
-  // 计算每帧的时间间隔（毫秒）
-  const intervalMs = Math.floor(intervalSeconds * 1000);
-
-  console.log(`📹 [关键帧提取] 视频时长: ${duration}ms, 提取帧数: ${actualFrameCount}, 间隔: ${intervalSeconds}秒 (${intervalMs}ms)`);
+  console.log(`📹 [关键帧提取] 视频时长: ${(duration / 1000).toFixed(1)}秒, 目标帧数: ${frameCount}, 动态间隔: ${(intervalMs / 1000).toFixed(2)}秒`);
 
   // ========================================
   // ✅ 并行提取关键帧（性能提升 3-4 倍）
@@ -84,9 +86,9 @@ export async function extractKeyframes(
     outputPath: string;
   }> = [];
 
-  for (let i = 0; i < actualFrameCount; i++) {
-    // 计算当前帧的时间戳（毫秒）
-    const timestampMs = intervalMs * (i + 1);  // 从第 1 个间隔开始，避免从 0 开始
+  for (let i = 0; i < frameCount; i++) {
+    // ✅ 计算当前帧的时间戳（毫秒）- 动态间隔
+    const timestampMs = Math.floor(intervalMs * (i + 1));
 
     // 确保不超过视频时长
     if (timestampMs >= duration) {
@@ -255,12 +257,12 @@ function runFFprobe(args: string[]): Promise<string> {
  * 批量提取多个视频的关键帧
  *
  * @param videos - 视频路径列表
- * @param intervalSeconds - 采样间隔（秒，默认：3 秒）
+ * @param frameCount - 每个视频提取的帧数（默认：30 帧）
  * @returns 所有视频的关键帧结果
  */
 export async function extractKeyframesBatch(
   videos: Array<{ videoPath: string; videoId: number }>,
-  intervalSeconds: number = 3
+  frameCount: number = 30
 ): Promise<Map<number, KeyframesResult>> {
   const results = new Map<number, KeyframesResult>();
 
@@ -269,7 +271,7 @@ export async function extractKeyframesBatch(
       const result = await extractKeyframes({
         videoPath,
         outputDir: join(process.cwd(), 'public', 'keyframes', videoId.toString()),
-        intervalSeconds,
+        frameCount,
         filenamePrefix: `video_${videoId}_keyframe`
       });
 

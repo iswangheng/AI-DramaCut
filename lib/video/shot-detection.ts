@@ -31,18 +31,14 @@ function detectSceneChanges(
   videoPath: string,
   threshold = 0.3
 ): SceneChange[] {
-  const command = [
-    'ffmpeg',
-    '-i', videoPath,
-    '-filter_complex', `[0:v]select='gt(scene,${threshold})',showinfo`,
-    '-f', 'null',
-    '-'
-  ].join(' ');
+  // 使用双引号包裹整个 filter_complex 参数，避免引号嵌套问题
+  // 添加 2>&1 将 stderr 重定向到 stdout（FFmpeg 的 showinfo 输出到 stderr）
+  const command = `ffmpeg -i "${videoPath}" -filter_complex "[0:v]select='gt(scene,${threshold})',showinfo" -f null - 2>&1`;
 
   try {
     const output = execSync(command, {
       encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['ignore', 'pipe', 'pipe']  // 只返回 stdout（通过 2>&1 已经包含 stderr）
     });
 
     // 解析 FFmpeg 输出
@@ -50,8 +46,8 @@ function detectSceneChanges(
     const sceneChanges: SceneChange[] = [];
 
     for (const line of lines) {
-      // 查找包含 scene 切换信息的行
-      const match = line.match(/pts_time:(\d+\.\d+)/);
+      // 查找包含 scene 切换信息的行（支持整数和小数格式）
+      const match = line.match(/pts_time:(\d+\.?\d*)/);
       if (match) {
         sceneChanges.push({
           frame: 0, // FFmpeg 没有直接提供帧号

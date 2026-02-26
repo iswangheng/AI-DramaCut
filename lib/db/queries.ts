@@ -350,6 +350,13 @@ export const shotQueries = {
   },
 
   /**
+   * 删除指定视频的所有镜头（防止重复累积）
+   */
+  async deleteByVideoId(videoId: number) {
+    await db.delete(schema.shots).where(eq(schema.shots.videoId, videoId));
+  },
+
+  /**
    * 根据视频 ID 获取所有镜头
    */
   async getByVideoId(videoId: number) {
@@ -627,6 +634,13 @@ export const highlightQueries = {
   async createMany(data: typeof schema.highlights.$inferInsert[]) {
     const highlights = await db.insert(schema.highlights).values(data).returning();
     return highlights;
+  },
+
+  /**
+   * 删除指定视频的所有高光（防止重复累积）
+   */
+  async deleteByVideoId(videoId: number) {
+    await db.delete(schema.highlights).where(eq(schema.highlights.videoId, videoId));
   },
 
   /**

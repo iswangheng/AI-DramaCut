@@ -501,6 +501,10 @@ async function processExtractShotsJob(job: Job<ExtractShotsJobData>) {
     await job.updateProgress(70);
     wsServer.sendProgress(job.id!, 70, `检测到 ${shots.length} 个镜头，保存中...`);
 
+    // 删除该视频的旧镜头数据（防止重复累积）
+    await queries.shot.deleteByVideoId(videoId);
+    console.log(`🗑️  已清除视频 ${videoId} 的旧镜头数据`);
+
     // 保存镜头到数据库
     const shotsData = shots.map((shot) => ({
       videoId,
@@ -776,12 +780,12 @@ async function processAnalyzeProjectStorylinesJob(job: Job<AnalyzeProjectStoryli
 
     console.log(`\n📹 [${i + 1}/${videos.length}] 分析第 ${episodeNum} 集: ${video.filename}`);
 
-    // 更新进度
+    // 更新进度：开始处理当前视频
     const progress = Math.round((i / videos.length) * 50); // 前 50% 用于镜头和高光分析
     await job.updateProgress(progress);
     // 同时更新数据库
     await queries.queueJob.updateProgress(job.id!, progress);
-    wsServer.sendProgress(job.id!, progress, `正在分析第 ${episodeNum} 集...`);
+    wsServer.sendProgress(job.id!, progress, `正在分析第 ${episodeNum} 集: ${video.filename}`);
 
     // ========================================
     // 1.0 增量分析检查（跳过已分析的视频）
@@ -800,12 +804,12 @@ async function processAnalyzeProjectStorylinesJob(job: Job<AnalyzeProjectStoryli
         keyframesResults.set(video.id, existingKeyframes.map((kf: any) => kf.framePath));
       } else {
         // 提取关键帧（即使已分析，也补充提取关键帧）
-        console.log(`  📸 补充提取关键帧（每 3 秒一帧）...`);
+        console.log(`  📸 补充提取关键帧（固定 30 帧，动态间隔）...`);
 
         const keyframesResult = await extractVideoKeyframes({
           videoPath,
           outputDir: join(process.cwd(), 'public', 'keyframes', video.id.toString()),
-          intervalSeconds: 3,
+          frameCount: 30,  // ✅ 固定 30 帧，自动计算间隔
           filenamePrefix: `video_${video.id}_keyframe`,
         });
 
@@ -890,14 +894,14 @@ async function processAnalyzeProjectStorylinesJob(job: Job<AnalyzeProjectStoryli
     }
 
     // ========================================
-    // 1.1 提取关键帧（每 3 秒一帧，用于跨集分析）
+    // 1.1 提取关键帧（固定 30 帧，动态间隔，用于跨集分析）
     // ========================================
-    console.log(`  📸 提取关键帧（每 3 秒一帧）...`);
+    console.log(`  📸 提取关键帧（固定 30 帧，动态间隔）...`);
 
     const keyframesResult = await extractVideoKeyframes({
       videoPath,
       outputDir: join(process.cwd(), 'public', 'keyframes', video.id.toString()),
-      intervalSeconds: 3,
+      frameCount: 30,  // ✅ 固定 30 帧，自动计算间隔
       filenamePrefix: `video_${video.id}_keyframe`,
     });
 
@@ -918,10 +922,22 @@ async function processAnalyzeProjectStorylinesJob(job: Job<AnalyzeProjectStoryli
     // 收集关键帧路径（用于后续分析）
     keyframesResults.set(video.id, keyframesResult.framePaths);
 
+    // 更新进度：关键帧提取完成
+    const progressAfterKeyframes = Math.round((i / videos.length) * 50 + 5); // +5%
+    await job.updateProgress(progressAfterKeyframes);
+    await queries.queueJob.updateProgress(job.id!, progressAfterKeyframes);
+    wsServer.sendProgress(job.id!, progressAfterKeyframes, `第 ${episodeNum} 集: 提取了 ${keyframesResult.framePaths.length} 个关键帧`);
+
     // ========================================
     // 1.2 提取音频并使用 Whisper ASR 转录
     // ========================================
     console.log(`  🎵 提取音频并转录...`);
+
+    // 更新进度：开始音频转录
+    const progressBeforeAudio = Math.round((i / videos.length) * 50 + 10); // +10%
+    await job.updateProgress(progressBeforeAudio);
+    await queries.queueJob.updateProgress(job.id!, progressBeforeAudio);
+    wsServer.sendProgress(job.id!, progressBeforeAudio, `第 ${episodeNum} 集: 提取音频并转录...`);
 
     const audioPath = join(process.cwd(), 'uploads', `video_${video.id}_audio.wav`);
     let transcriptionText = '';
@@ -947,12 +963,18 @@ async function processAnalyzeProjectStorylinesJob(job: Job<AnalyzeProjectStoryli
         videoId: video.id,
         text: transcriptionResult.text,
         language: transcriptionResult.language,
-        duration: transcriptionResult.duration,
-        segments: JSON.stringify(transcriptionResult.segments),
+        duration: transcriptionResult.duration || 0,  // 🔧 添加默认值防止 NULL 错误
+        segments: JSON.stringify(transcriptionResult.segments || []),
         model: 'whisper-small',
       });
 
       console.log(`  ✅ 音频转录完成 (${transcriptionResult.text.length} 字)`);
+
+      // 更新进度：音频转录完成
+      const progressAfterAudio = Math.round((i / videos.length) * 50 + 15); // +15%
+      await job.updateProgress(progressAfterAudio);
+      await queries.queueJob.updateProgress(job.id!, progressAfterAudio);
+      wsServer.sendProgress(job.id!, progressAfterAudio, `第 ${episodeNum} 集: 音频转录完成 (${transcriptionResult.text.length} 字)`);
 
       // ✅ 立即清理临时音频文件
       try {
@@ -978,6 +1000,12 @@ async function processAnalyzeProjectStorylinesJob(job: Job<AnalyzeProjectStoryli
     // 1.3 视频分析（包含增强摘要 + 转录文本）
     // ========================================
     console.log(`  🎬 镜头分析中...`);
+
+    // 更新进度：开始 Gemini 分析
+    const progressBeforeAnalysis = Math.round((i / videos.length) * 50 + 20); // +20%
+    await job.updateProgress(progressBeforeAnalysis);
+    await queries.queueJob.updateProgress(job.id!, progressBeforeAnalysis);
+    wsServer.sendProgress(job.id!, progressBeforeAnalysis, `第 ${episodeNum} 集: Gemini AI 镜头分析中...`);
 
     // 构建包含转录文本的提示
     let transcriptionHint = '';
@@ -1038,6 +1066,12 @@ ${transcriptionText}
     // ========================================
     console.log(`  ✨ 高光检测中...`);
 
+    // 更新进度：开始高光检测
+    const progressBeforeHighlights = Math.round((i / videos.length) * 50 + 30); // +30%
+    await job.updateProgress(progressBeforeHighlights);
+    await queries.queueJob.updateProgress(job.id!, progressBeforeHighlights);
+    wsServer.sendProgress(job.id!, progressBeforeHighlights, `第 ${episodeNum} 集: 高光时刻检测中...`);
+
     // 确保 analyzeResult.data 存在，否则使用默认值
     const analysisData = analyzeResult.data || {
       summary: '',
@@ -1052,6 +1086,9 @@ ${transcriptionText}
 
     if (highlightsResult.success && highlightsResult.data) {
       const highlights = highlightsResult.data;
+
+      // 🔧 先删除该视频的旧高光数据（防止重复累积）
+      await queries.highlight.deleteByVideoId(video.id);
 
       // 保存高光到数据库
       const highlightsData = highlights.map((highlight: any) => {
@@ -1068,6 +1105,12 @@ ${transcriptionText}
 
       await queries.highlight.createMany(highlightsData);
       console.log(`  ✅ 保存了 ${highlightsData.length} 个高光时刻`);
+
+      // 更新进度：高光检测完成
+      const progressAfterHighlights = Math.round((i / videos.length) * 50 + 40); // +40%
+      await job.updateProgress(progressAfterHighlights);
+      await queries.queueJob.updateProgress(job.id!, progressAfterHighlights);
+      wsServer.sendProgress(job.id!, progressAfterHighlights, `第 ${episodeNum} 集: 检测到 ${highlightsData.length} 个高光时刻 ✅`);
 
       highlightAnalysisResults.push({
         videoId: video.id,
