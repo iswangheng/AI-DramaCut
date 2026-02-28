@@ -100,7 +100,7 @@ export default function TranscriptionsPage({ params }: { params: Promise<{ id: s
   }
 
   return (
-    <MainLayout projectId={projectId}>
+    <MainLayout>
       <div className="p-6 space-y-6">
         {/* 页面标题 */}
         <div className="flex items-center justify-between">

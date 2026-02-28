@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { FolderOpen, Scissors, Mic, ListTodo, Settings } from "lucide-react";
+import { FolderOpen, Scissors, Mic, ListTodo, Settings, Zap } from "lucide-react";
 import { ProjectSelector } from "./project-selector";
 
 interface NavItem {
@@ -16,6 +16,7 @@ const navItems: NavItem[] = [
   { id: "projects", label: "项目管理", icon: <FolderOpen className="w-5 h-5" />, section: "work", path: "/projects" },
   { id: "highlight", label: "高光切片模式", icon: <Scissors className="w-5 h-5" />, section: "work", path: "/highlight" },
   { id: "recap", label: "深度解说模式", icon: <Mic className="w-5 h-5" />, section: "work", path: "/recap" },
+  { id: "hangzhou-leiming", label: "杭州雷鸣", icon: <Zap className="w-5 h-5" />, section: "work", path: "/hangzhou-leiming" },
   { id: "tasks", label: "任务管理", icon: <ListTodo className="w-5 h-5" />, section: "system", path: "/tasks" },
 ];
 

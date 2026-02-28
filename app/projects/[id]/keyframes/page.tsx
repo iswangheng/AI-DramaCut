@@ -203,7 +203,7 @@ export default function KeyframesPage({ params }: { params: Promise<{ id: string
   }
 
   return (
-    <MainLayout projectId={projectId}>
+    <MainLayout>
       <div className="p-6 space-y-6">
         {/* 页面标题 */}
         <div className="flex items-center justify-between">

@@ -21,6 +21,13 @@ export async function GET(
     // 获取原始 SQLite 实例
     const sqlite = dbClient.getSqlite();
 
+    if (!sqlite) {
+      return NextResponse.json({
+        success: false,
+        message: '数据库连接失败'
+      }, { status: 500 });
+    }
+
     // 查询项目的所有视频
     const videos = sqlite.prepare(`
       SELECT id, filename, episode_number, display_title
@@ -81,17 +88,22 @@ export async function GET(
   } catch (error) {
     console.error('========================================');
     console.error('获取关键帧失败:', error);
-    console.error('错误类型:', error.constructor.name);
-    console.error('错误消息:', error.message);
-    console.error('错误堆栈:', error.stack);
 
-    if (error.cause) {
-      console.error('根本原因:', error.cause);
+    if (error instanceof Error) {
+      console.error('错误类型:', error.constructor.name);
+      console.error('错误消息:', error.message);
+      console.error('错误堆栈:', error.stack);
+    } else {
+      console.error('未知错误:', String(error));
+    }
+
+    if (error instanceof Error && 'cause' in error) {
+      console.error('根本原因:', (error as any).cause);
     }
 
     // 尝试获取更多 Drizzle 错误信息
-    if (error.code) {
-      console.error('错误代码:', error.code);
+    if (error instanceof Error && 'code' in error) {
+      console.error('错误代码:', (error as any).code);
     }
 
     console.error('========================================');
@@ -99,11 +111,11 @@ export async function GET(
     return NextResponse.json({
       success: false,
       message: error instanceof Error ? error.message : '获取关键帧失败',
-      debug: {
+      debug: error instanceof Error ? {
         type: error.constructor.name,
-        code: error.code,
-        query: error.query
-      }
+        code: (error as any).code,
+        query: (error as any).query
+      } : undefined
     }, { status: 500 });
   }
 }

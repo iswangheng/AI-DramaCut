@@ -22,6 +22,13 @@ export async function GET(request: NextRequest) {
     // 获取原始 SQLite 实例
     const sqlite = dbClient.getSqlite();
 
+    if (!sqlite) {
+      return NextResponse.json({
+        success: false,
+        error: '数据库连接失败'
+      }, { status: 500 });
+    }
+
     // 使用原始 SQL 查询
     const videos = sqlite.prepare(`
       SELECT id, filename, episode_number, display_title
@@ -70,16 +77,19 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('[测试] 错误:', error);
-    console.error('[测试] 错误类型:', error.constructor.name);
-    console.error('[测试] 错误堆栈:', error.stack);
+
+    if (error instanceof Error) {
+      console.error('[测试] 错误类型:', error.constructor.name);
+      console.error('[测试] 错误堆栈:', error.stack);
+    }
 
     return NextResponse.json({
       success: false,
-      error: error.message,
-      debug: {
+      error: error instanceof Error ? error.message : String(error),
+      debug: error instanceof Error ? {
         type: error.constructor.name,
-        code: error.code
-      }
+        code: (error as any).code
+      } : undefined
     }, { status: 500 });
   }
 }

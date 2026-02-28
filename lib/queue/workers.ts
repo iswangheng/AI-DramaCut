@@ -75,6 +75,7 @@ export interface AnalyzeProjectStorylinesJobData {
   projectId: number;
   videoIds: number[];
   totalVideos: number;
+  force?: boolean;
 }
 
 export type VideoJobData =

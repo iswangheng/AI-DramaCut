@@ -13,6 +13,11 @@ async function main() {
 
   // 获取需要重新提取的视频
   const sqlite = dbClient.getSqlite();
+  if (!sqlite) {
+    console.error('❌ 无法获取数据库连接');
+    process.exit(1);
+  }
+
   const videos = sqlite.prepare(`
     SELECT id, file_path, filename
     FROM videos

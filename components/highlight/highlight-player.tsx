@@ -238,16 +238,15 @@ export const HighlightPlayer = forwardRef<HighlightPlayerRef, HighlightPlayerPro
         <div className="aspect-video max-h-[600px]">
           <ReactPlayer
             ref={playerRef as any}
-            url={url}
+            {...{ url } as any}
             playing={isPlaying}
-            controls={true}  // 临时启用原生控件测试
             width="100%"
             height="100%"
             onReady={handleReady}
             onProgress={handleProgress as any}
-            onError={(e) => {
+            onError={(e: any) => {
               console.error("❌ ReactPlayer 错误:", e);
-              setLoadError(e.toString() || "视频加载失败");
+              setLoadError(e?.toString?.() || "视频加载失败");
               onReady?.();
             }}
           />

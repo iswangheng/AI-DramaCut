@@ -57,7 +57,7 @@ async function hasGPUSupport(): Promise<boolean> {
     // 检查是否是 Mac（Mac 不支持 CUDA，应该使用 CPU 或 MPS）
     try {
       const { stdout: platformStdout } = await execCheck('uname');
-      if (platformStdout.toString().includes('Darwin')) {
+      if (platformStdout && platformStdout.toString().includes('Darwin')) {
         console.log('ℹ️  检测到 macOS 系统，使用 CPU 模式（Mac 不支持 CUDA）');
         return false;
       }

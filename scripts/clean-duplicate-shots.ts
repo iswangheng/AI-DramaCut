@@ -9,6 +9,10 @@ async function main() {
   console.log('🧹 开始清理重复的镜头数据...\n');
 
   const sqlite = dbClient.getSqlite();
+  if (!sqlite) {
+    console.error('❌ 无法获取数据库连接');
+    process.exit(1);
+  }
 
   // 获取需要处理的视频 ID
   const videos = sqlite.prepare(`

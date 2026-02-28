@@ -24,7 +24,7 @@ export async function GET(
     const keyframes = await queries.keyframe.getByVideoId(videoId);
 
     // 转换绝对路径为相对 URL（前端可以访问）
-    const keyframesWithUrls = keyframes.map(keyframe => ({
+    const keyframesWithUrls = keyframes.map((keyframe: any) => ({
       ...keyframe,
       framePath: keyframe.framePath.split('/public/')[1] || keyframe.framePath,
     }));
