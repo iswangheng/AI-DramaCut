@@ -9,8 +9,12 @@
  * - 去重逻辑
  */
 
-import { describe, it, expect, beforeAll, beforeEach } from '@jest/globals';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from '@jest/globals';
 import { RecommendationEngine, Marking } from '../lib/ai/recommendation-engine';
+import {
+  setupRecommendationEngineTestData,
+  cleanupRecommendationEngineTestData,
+} from './helpers/test-data-setup';
 
 // ============================================
 // Mock 数据
@@ -87,7 +91,19 @@ const mockMarkings: Marking[] = [
 // 测试套件
 // ============================================
 
+let testAnalysisId: number;
+
 describe('推荐引擎', () => {
+  beforeAll(async () => {
+    // 设置测试数据
+    const testData = await setupRecommendationEngineTestData();
+    testAnalysisId = testData.analysisId;
+  });
+
+  afterAll(async () => {
+    // 清理测试数据
+    await cleanupRecommendationEngineTestData();
+  });
   describe('组合生成逻辑', () => {
     it('应该生成单集组合（同一视频内的 高光→钩子）', async () => {
       const highlights = mockMarkings.filter((m) => m.type === '高光点' && m.videoId === 1);
@@ -95,7 +111,7 @@ describe('推荐引擎', () => {
 
       // 使用私有方法测试（这里假设可以通过公开API访问）
       const combinations = await RecommendationEngine.generateRecommendations({
-        analysisId: 1, // Mock analysisId
+        analysisId: testAnalysisId, // 使用真实的测试数据ID
         minDurationMs: 90000, // 90秒
         maxDurationMs: 120000, // 120秒
         maxCombinations: 10,
@@ -114,7 +130,7 @@ describe('推荐引擎', () => {
 
     it('应该生成跨集组合（不同视频的 高光→钩子）', async () => {
       const combinations = await RecommendationEngine.generateRecommendations({
-        analysisId: 1,
+        analysisId: testAnalysisId, // 使用真实的测试数据ID
         minDurationMs: 100000,
         maxDurationMs: 150000,
         maxCombinations: 10,
@@ -122,10 +138,15 @@ describe('推荐引擎', () => {
       });
 
       // 验证存在跨集组合
-      const crossEpisodeCombinations = combinations.filter(
-        (combo) => combo.clips.some((clip) => clip.videoId === 1) &&
-                   combo.clips.some((clip) => clip.videoId === 2)
-      );
+      const crossEpisodeCombinations = combinations.filter((combo) => {
+        const videoIds = combo.clips.map((clip) => clip.videoId);
+        return new Set(videoIds).size > 1; // 至少有2个不同的videoId
+      });
+
+      // 打印调试信息
+      console.log(`总组合数: ${combinations.length}`);
+      console.log(`跨集组合数: ${crossEpisodeCombinations.length}`);
+      console.log(`所有组合的videoId:`, combinations.map((c) => c.clips.map((clip) => clip.videoId)));
 
       expect(crossEpisodeCombinations.length).toBeGreaterThan(0);
     });
