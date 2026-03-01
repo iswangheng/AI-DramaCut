@@ -1,18 +1,17 @@
 /**
- * 杭州雷鸣 - AI 分析 API（智能标记版本）
+ * 杭州雷鸣 - AI 分析 API（真实版本）
  *
  * 功能：
  * - POST /api/hangzhou-leiming/projects/:id/analyze - AI分析并生成剪辑组合
- * - GET  /api/hangzhou-leiming/projects/:id/analyze?taskId=xxx - 查询分析状态
- * 使用新的 MarkingPipeline 进行智能标记
+ * 使用真实的 Gemini API 进行视频分析
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { hlVideos, hlSkills, hlAnalysisResults, hlAiMarkings, hlClipCombinations, hlProjects } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { GeminiClient } from "@/lib/api/gemini";
-import { runMarkingPipeline } from "@/lib/ai/marking-pipeline";
+import { extractFrames, getVideoDuration } from "@/lib/video/preprocessing";
 import { join } from "path";
 
 interface RouteParams {
@@ -525,73 +524,4 @@ async function generateClipCombinations(
 
   // 只返回前10个
   return combinations.slice(0, 10);
-}
-
-// ============================================
-// GET: 查询分析状态和结果
-// ============================================
-
-export async function GET(
-  req: NextRequest,
-  { params }: RouteParams
-) {
-  try {
-    const { id: idStr } = await params;
-    const projectId = parseInt(idStr);
-    const { searchParams } = new URL(req.url);
-    const taskId = searchParams.get('taskId');
-
-    if (taskId) {
-      // 查询特定任务的状态
-      const task = await db.query.hlAnalysisResults.findFirst({
-        where: eq(hlAnalysisResults.id, parseInt(taskId)),
-      });
-
-      if (!task) {
-        return NextResponse.json({ error: '任务不存在' }, { status: 404 });
-      }
-
-      // 获取标记结果
-      const markings = await db.select().from(hlAiMarkings)
-        .where(eq(hlAiMarkings.analysisId, task.id))
-        .orderBy(hlAiMarkings.startMs);
-
-      // 获取剪辑组合
-      const combinations = await db.select().from(hlClipCombinations)
-        .where(eq(hlClipCombinations.analysisId, task.id))
-        .orderBy(hlClipCombinations.rank);
-
-      return NextResponse.json({
-        success: true,
-        task: {
-          id: task.id,
-          status: task.status,
-          progress: task.progress,
-          currentStep: task.currentStep,
-          highlightsFound: task.highlightsFound,
-          hooksFound: task.hooksFound,
-          errorMessage: task.errorMessage,
-        },
-        markings,
-        combinations,
-      });
-    } else {
-      // 查询项目的所有分析任务
-      const tasks = await db.select().from(hlAnalysisResults)
-        .where(eq(hlAnalysisResults.projectId, projectId))
-        .orderBy(hlAnalysisResults.createdAt);
-
-      return NextResponse.json({
-        success: true,
-        tasks,
-      });
-    }
-
-  } catch (error) {
-    console.error('❌ [API] 查询分析失败:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : '查询分析失败' },
-      { status: 500 }
-    );
-  }
 }

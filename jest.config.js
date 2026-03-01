@@ -1,9 +1,8 @@
-import type { Config } from 'ts-jest';
-
-export default {
+/** @type {import('ts-jest').JestConfigWithTsJest} */
+module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/lib', '<rootDir>/app'],
+  roots: ['<rootDir>/lib', '<rootDir>/app', '<rootDir>/tests'],
   testMatch: ['**/__tests__/**/*.test.ts', '**/?(*.)+(spec|test).ts'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
@@ -14,4 +13,4 @@ export default {
     '!**/*.d.ts',
     '!**/node_modules/**',
   ],
-} satisfies Config;
+};

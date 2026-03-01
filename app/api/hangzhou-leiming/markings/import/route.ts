@@ -138,23 +138,33 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * 解析时间戳字符串为秒数
+ * 解析时间戳为秒数
  * 支持格式：
  * - "00:35" -> 35秒
  * - "01:20" -> 80秒
  * - "00:01:20" -> 80秒
+ * - 0.025694444 -> 数字（天数，Excel 格式）-> 转换为秒
  */
-function parseTimestamp(timestamp: string): number {
-  const parts = timestamp.split(":").map(Number);
+function parseTimestamp(timestamp: string | number): number {
+  // 如果是数字格式（Excel 小数格式）
+  if (typeof timestamp === "number") {
+    // Excel 中的时间通常是天数
+    return Math.round(timestamp * 24 * 60 * 60); // 转换为秒
+  }
 
-  if (parts.length === 2) {
-    // MM:SS
-    const [minutes, seconds] = parts;
-    return minutes * 60 + seconds;
-  } else if (parts.length === 3) {
-    // HH:MM:SS
-    const [hours, minutes, seconds] = parts;
-    return hours * 3600 + minutes * 60 + seconds;
+  // 如果是字符串格式
+  if (typeof timestamp === "string") {
+    const parts = timestamp.split(":").map(Number);
+
+    if (parts.length === 2) {
+      // MM:SS
+      const [minutes, seconds] = parts;
+      return minutes * 60 + seconds;
+    } else if (parts.length === 3) {
+      // HH:MM:SS
+      const [hours, minutes, seconds] = parts;
+      return hours * 3600 + minutes * 60 + seconds;
+    }
   }
 
   return NaN;

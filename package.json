@@ -23,6 +23,9 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "test:learning": "tsx scripts/test-learning.ts",
+    "test:recommendation": "tsx scripts/test-recommendation-engine.ts",
+    "test:export": "tsx scripts/test-export.ts",
     "commit": "./scripts/commit-work-interactive.sh",
     "commit:quick": "./scripts/commit-work.sh"
   },

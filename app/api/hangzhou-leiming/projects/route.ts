@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { hlProjects, hlVideos, hlMarkings } from "@/lib/db/schema";
 import { desc, eq, sql, count } from "drizzle-orm";
+import type { HLProject } from "@/lib/db/schema";
 
 // GET - 获取项目列表
 export async function GET() {
@@ -22,7 +23,7 @@ export async function GET() {
 
     // 为每个项目统计视频和标记数量
     const projectsWithStats = await Promise.all(
-      projects.map(async (project) => {
+      projects.map(async (project: HLProject) => {
         // 统计视频数量
         const [videoCountResult] = await db
           .select({ count: count() })
