@@ -32,6 +32,130 @@
 
 ## 📅 更新日志
 
+### 2026-03-01 - 训练系统和视频管理优化完成
+
+#### ✅ 完成事项
+
+- ✅ **AI 训练系统完整实现**（`lib/training/executor.ts`）
+  - 完整的训练流程（特征提取 → AI 分析 → 技能生成）
+  - 视频特征提取：
+    - Whisper base 模型 ASR 转录（~150MB，高准确度）
+    - 关键帧提取（0.5fps = 每 0.5 秒 1 帧）
+    - 时间窗口：关键帧 ±30 秒，ASR ±10 秒
+  - Gemini Vision 深度分析：
+    - 理解标记点为何是高光（WHY 分析）
+    - Few-Shot Learning（历史标记教AI识别模式）
+    - 聚类分析（按对话类型分组提取模式）
+  - 技能文件生成（JSON 格式存储到 `data/skills/`）
+  - 并发处理：5 个标记点并行处理
+  - 进度回调：实时更新（0% → 10% → 50% → 80% → 95%）
+
+- ✅ **Prompt 管理系统**（`lib/prompts/loader.ts`）
+  - 独立文件管理所有 AI 提示词
+  - 变量替换功能（`{{variable}}` 格式）
+  - 4 个训练专用 Prompt：
+    - `prompts/hangzhou-leiming/training/analyze-marking.md` - 标记点分析
+    - `prompts/hangzhou-leiming/training/analyze-keyframes.md` - 关键帧分析
+    - `prompts/hangzhou-leiming/training/generate-skill.md` - 技能文件生成
+    - `prompts/hangzhou-leiming/marking/marking-with-skill.md` - 应用技能识别
+
+- ✅ **Excel 时间戳解析修复**
+  - 修复 MM:SS:ms 格式解析（分钟:秒:毫秒）
+  - 修复前："0:05:00" → 300秒（错误，按小时解析）
+  - 修复后："0:05:00" → 5秒（正确，按分钟解析）
+  - 保存原始 Excel 文件到磁盘（`data/hangzhou-leiming/{projectId}/excel/`）
+  - 重新导入工具（`scripts/reimport-excel.ts`）
+
+- ✅ **视频管理优化**（`app/hangzhou-leiming/[id]/videos/page.tsx`）
+  - 修复文件大小显示（MB/GB/TB 分级显示）
+  - 修复前：2.7MB 显示为 2.7GB
+  - 添加视频播放弹窗功能：
+    - 点击视频卡片播放
+    - HTML5 标准播放器控件
+    - 播放/暂停按钮
+    - 点击外部关闭弹窗
+  - 使用 `/api/videos/[id]/stream` 端点流式传输
+
+- ✅ **数据修复脚本**
+  - `scripts/fix-episode-numbers.ts` - 修复视频集数提取
+    - 支持多种格式：1.mp4, 01.mp4, EP3.mp4, 第2集.mp4
+  - `scripts/fix-video-durations.ts` - 修复视频时长（ffprobe 集成）
+  - `scripts/fix-marking-timestamps.ts` - 修复标记时间戳
+  - `scripts/reimport-excel.ts` - 重新导入 Excel（使用修复后的解析逻辑）
+
+- ✅ **前端容错优化**
+  - `app/api/hangzhou-leiming/training-center/history/route.ts`
+    - 添加 `safeParseJSON()` 函数
+    - 安全解析 JSON 字段（projectIds, projectNames）
+  - `app/hangzhou-leiming/training-center/history/page.tsx`
+    - HTTP 状态检查
+    - JSON 解析 try-catch
+    - 友好的错误提示
+
+#### 🎯 技术亮点
+
+- **AI 训练流程**：从简单统计升级为真正的 AI 学习（理解 WHY）
+- **Whisper Base 模型**：训练模式使用 base 模型（~150MB），准确度优先
+- **Prompt 管理**：独立文件管理，便于 A/B 测试和优化
+- **时间戳修复**：用户两次纠正后最终修复为 MM:SS:ms 格式
+- **用户体验**：视频管理增强（播放功能 + 正确的文件大小显示）
+
+#### 📦 变更文件
+
+**新增核心代码**：
+- `lib/training/executor.ts` (~600 行) - 训练执行器
+- `lib/prompts/loader.ts` (~80 行) - Prompt 加载器
+- `prompts/hangzhou-leiming/training/*.md` - 4 个训练 Prompt
+- `prompts/hangzhou-leiming/marking/marking-with-skill.md` - 应用技能 Prompt
+
+**修改文件**：
+- `app/hangzhou-leiming/[id]/videos/page.tsx` - 视频管理页面（+60 行）
+  - 修复 `formatFileSize()` 函数
+  - 添加视频播放弹窗
+- `app/api/hangzhou-leiming/markings/import/route.ts` - Excel 导入（时间戳修复）
+- `app/api/hangzhou-leiming/training-center/history/route.ts` - 训练历史 API（容错）
+- `app/hangzhou-leiming/training-center/history/page.tsx` - 训练历史前端（容错）
+- `app/api/hangzhou-leiming/videos/route.ts` - 视频上传（集数提取）
+- `lib/audio/transcriber.ts` - Whisper 转录（base 模型）
+- `lib/video/keyframes.ts` - 关键帧提取（FPS 模式支持）
+
+**新增脚本**：
+- `scripts/fix-episode-numbers.ts` - 修复视频集数
+- `scripts/fix-video-durations.ts` - 修复视频时长
+- `scripts/fix-marking-timestamps.ts` - 修复标记时间戳
+- `scripts/reimport-excel.ts` - 重新导入 Excel
+- `scripts/clean-invalid-markings.ts` - 清理无效标记
+
+**新增文档**：
+- `docs/DEPENDENCIES.md` (~500 行) - 完整依赖安装指南
+- `docs/WHISPER-INSTALLATION-COMPLETE.md` (~200 行) - Whisper 安装总结
+
+#### 🐛 修复的关键问题
+
+1. **Excel 时间戳解析错误**（用户两次纠正）
+   - 错误：按 HH:MM:SS 解析（"0:05:00" → 300秒）
+   - 正确：按 MM:SS:ms 解析（"0:05:00" → 5秒）
+
+2. **视频集数未识别**
+   - 问题：所有视频集数为"未命名"
+   - 解决：`extractEpisodeNumber()` 自动识别文件名
+
+3. **视频时长为 0**
+   - 问题：所有视频 `durationMs = 0`
+   - 解决：使用 ffprobe 提取实际时长
+
+4. **文件大小显示错误**
+   - 问题：2.7MB 显示为 2.7GB
+   - 解决：修复 `formatFileSize()` 分级逻辑
+
+#### 📊 完成状态
+- ✅ AI 训练系统：100% 完成
+- ✅ Excel 时间戳修复：100% 完成
+- ✅ 视频管理优化：100% 完成
+- ✅ 前端容错优化：100% 完成
+
+---
+
 ### 2026-03-01 - 完成杭州雷鸣Tab重构，实现单页面切换
 
 #### ✅ 完成事项
