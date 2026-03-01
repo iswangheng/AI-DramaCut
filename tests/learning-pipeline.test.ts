@@ -10,11 +10,11 @@ import * as transcriberModule from '@/lib/audio/transcriber';
 import * as geminiModule from '@/lib/api/gemini';
 
 // Mock 模块
-vi.mock('@/lib/video/keyframes');
-vi.mock('@/lib/audio/transcriber');
-vi.mock('@/lib/api/gemini');
-vi.mock('@/lib/db/client');
-vi.mock('@/lib/ws/server');
+jest.mock('@/lib/video/keyframes');
+jest.mock('@/lib/audio/transcriber');
+jest.mock('@/lib/api/gemini');
+jest.mock('@/lib/db/client');
+jest.mock('@/lib/ws/server');
 
 describe('AI 学习流程测试', () => {
   const mockProjectId = 1;
@@ -50,11 +50,11 @@ describe('AI 学习流程测试', () => {
 
   beforeEach(() => {
     // 清理所有 mocks
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
   });
 
   describe('LearningPipeline 类', () => {
@@ -103,7 +103,7 @@ describe('AI 学习流程测试', () => {
         },
       };
 
-      vi.spyOn(LearningPipeline.prototype, 'execute').mockResolvedValue(mockResult);
+      jest.spyOn(LearningPipeline.prototype, 'execute').mockResolvedValue(mockResult);
 
       const result = await startLearning(config);
 
@@ -115,14 +115,14 @@ describe('AI 学习流程测试', () => {
   describe('多模态提取', () => {
     it('应该成功提取关键帧和转录音频', async () => {
       // Mock extractKeyframes
-      vi.mocked(keyframesModule.extractKeyframes).mockResolvedValue({
+      jest.mocked(keyframesModule.extractKeyframes).mockResolvedValue({
         framePaths: ['/test/frame1.jpg', '/test/frame2.jpg'],
         timestamps: [35000, 40000],
         outputDir: '/test/frames',
       });
 
       // Mock transcribeAudio
-      vi.mocked(transcriberModule.transcribeAudio).mockResolvedValue({
+      jest.mocked(transcriberModule.transcribeAudio).mockResolvedValue({
         text: '这是测试转录文本',
         language: 'zh',
         duration: 120,
@@ -130,8 +130,8 @@ describe('AI 学习流程测试', () => {
       });
 
       // Mock 文件系统
-      const mockExistsSync = vi.fn(() => false);
-      vi.doMock('fs', () => ({
+      const mockExistsSync = jest.fn(() => false);
+      jest.doMock('fs', () => ({
         existsSync: mockExistsSync,
       }));
 
@@ -178,8 +178,8 @@ describe('AI 学习流程测试', () => {
 }`,
       };
 
-      vi.mocked(geminiModule.getGeminiClient).mockReturnValue({
-        callApi: vi.fn().mockResolvedValue(mockGeminiResponse),
+      jest.mocked(geminiModule.getGeminiClient).mockReturnValue({
+        callApi: jest.fn().mockResolvedValue(mockGeminiResponse),
       } as any);
 
       const client = geminiModule.getGeminiClient();
@@ -203,8 +203,8 @@ describe('AI 学习流程测试', () => {
         data: '这不是有效的 JSON',
       };
 
-      vi.mocked(geminiModule.getGeminiClient).mockReturnValue({
-        callApi: vi.fn().mockResolvedValue(invalidJsonResponse),
+      jest.mocked(geminiModule.getGeminiClient).mockReturnValue({
+        callApi: jest.fn().mockResolvedValue(invalidJsonResponse),
       } as any);
 
       const client = geminiModule.getGeminiClient();
@@ -292,16 +292,16 @@ describe('AI 学习流程测试', () => {
   describe('进度推送', () => {
     it('应该正确推送进度更新', () => {
       const mockWsServer = {
-        sendProgress: vi.fn(),
+        sendProgress: jest.fn(),
       };
 
-      vi.doMock('@/lib/ws/server', () => ({
+      jest.doMock('@/lib/ws/server', () => ({
         default: mockWsServer,
       }));
 
       const config: LearningConfig = {
         projectId: mockProjectId,
-        onProgress: vi.fn(),
+        onProgress: jest.fn(),
       };
 
       const pipeline = new LearningPipeline(config);
@@ -341,7 +341,7 @@ describe('AI 学习流程测试', () => {
       const pipeline = new LearningPipeline(config);
 
       // Mock prepareData 返回空数组
-      vi.spyOn(pipeline as any, 'prepareData').mockResolvedValue([]);
+      jest.spyOn(pipeline as any, 'prepareData').mockResolvedValue([]);
 
       await expect(pipeline.execute()).rejects.toThrow('项目没有标记数据');
     });

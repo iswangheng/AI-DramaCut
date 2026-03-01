@@ -18,34 +18,34 @@ import {
 } from "@/lib/export";
 
 // Mock 数据库
-vi.mock("@/lib/db/client", () => ({
+jest.mock("@/lib/db/client", () => ({
   db: {
-    select: vi.fn(),
-    insert: vi.fn(),
-    update: vi.fn(),
+    select: jest.fn(),
+    insert: jest.fn(),
+    update: jest.fn(),
   },
 }));
 
 // Mock FFmpeg 工具
-vi.mock("@/lib/ffmpeg", () => ({
-  trimVideo: vi.fn(),
+jest.mock("@/lib/ffmpeg", () => ({
+  trimVideo: jest.fn(),
 }));
 
-vi.mock("@/lib/ffmpeg/concat", () => ({
-  concatVideos: vi.fn(),
+jest.mock("@/lib/ffmpeg/concat", () => ({
+  concatVideos: jest.fn(),
 }));
 
 // Mock fs 模块
-vi.mock("fs", () => ({
-  existsSync: vi.fn(() => true),
-  readFileSync: vi.fn(),
-  statSync: vi.fn(() => ({ size: 1024 * 1024 * 10 })),
-  readdirSync: vi.fn(() => []),
+jest.mock("fs", () => ({
+  existsSync: jest.fn(() => true),
+  readFileSync: jest.fn(),
+  statSync: jest.fn(() => ({ size: 1024 * 1024 * 10 })),
+  readdirSync: jest.fn(() => []),
 }));
 
-vi.mock("fs/promises", () => ({
-  mkdir: vi.fn(),
-  rm: vi.fn(),
+jest.mock("fs/promises", () => ({
+  mkdir: jest.fn(),
+  rm: jest.fn(),
 }));
 
 describe("视频导出模块", () => {
@@ -145,7 +145,7 @@ describe("视频导出模块", () => {
       const tempDir = "/tmp/exports/test_123";
 
       // Mock rm 函数
-      const rm = vi.fn().mockResolvedValue(undefined);
+      const rm = jest.fn().mockResolvedValue(undefined);
       vi.doMock("fs/promises", () => ({ rm }));
 
       // 调用清理函数
@@ -161,7 +161,7 @@ describe("视频导出模块", () => {
 
   describe("错误处理", () => {
     it("应该处理视频文件不存在的情况", () => {
-      const existsSync = vi.fn(() => false);
+      const existsSync = jest.fn(() => false);
 
       expect(existsSync("/nonexistent/video.mp4")).toBe(false);
     });
