@@ -408,16 +408,20 @@ export class TrainingExecutor {
       // 降级方案：基于 ASR 进行简化分析
       console.log(`  ⚠️ 使用降级方案：基于 ASR 文本分析`);
 
-      const fallbackAnalysis = this.generateFallbackAnalysis(transcript, framePaths.length, timestamps);
+      const fallbackAnalysis = await this.generateFallbackAnalysis(transcript, framePaths.length, timestamps);
 
       return fallbackAnalysis;
     }
   }
 
   /**
-   * 生成基于 ASR 的降级分析
+   * 生成基于 ASR 的降级分析（使用 DeepSeek）
    */
-  private generateFallbackAnalysis(transcript: string | undefined, frameCount: number, timestamps: number[]): string {
+  private async generateFallbackAnalysis(
+    transcript: string | undefined,
+    frameCount: number,
+    timestamps: number[]
+  ): Promise<string> {
     const timeRange = `${this.formatMs(timestamps[0])} - ${this.formatMs(timestamps[timestamps.length - 1])}`;
 
     if (!transcript || transcript.trim() === '（无对白）' || transcript.trim() === '') {
@@ -436,7 +440,114 @@ export class TrainingExecutor {
 - 建议人工复核`;
     }
 
-    // 基于ASR文本进行简单分析
+    // 使用 DeepSeek 分析 ASR 文本
+    try {
+      console.log(`  🤖 使用 DeepSeek 分析 ASR 文本...`);
+
+      const geminiConfig = await import('../config').then(m => m.geminiConfig);
+      const apiKey = geminiConfig.apiKey;
+      const endpoint = geminiConfig.endpoint || 'https://yunwu.ai';
+
+      // DeepSeek API（通过 yunwu.ai 代理，兼容 OpenAI 格式）
+      const apiUrl = `${endpoint}/v1/chat/completions?key=${apiKey}`;
+
+      const prompt = `你是短剧剪辑分析师。请分析以下对白文本，提取情绪和特征。
+
+**对白内容**：
+${transcript}
+
+**请分析并返回 JSON**：
+\`\`\`json
+{
+  "emotion": "情绪类型（愤怒/激动/悲伤/疑惑/平静）",
+  "intensity": 情绪强度（0-10的数字）,
+  "dialogue_type": "台词类型（指责/告白/威胁/解释/质疑/命令）",
+  "keywords": ["关键词1", "关键词2", "关键词3"],
+  "tone": "语气描述",
+  "reasoning": "简短分析（50字以内）"
+}
+\`\`\``;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'deepseek-v3', // 使用 DeepSeek V3
+          messages: [
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          temperature: 0.7,
+          max_tokens: 500,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`DeepSeek API 错误: ${response.status}`);
+      }
+
+      const result = await response.json();
+      const content = result.choices?.[0]?.message?.content || '';
+
+      if (!content) {
+        throw new Error('DeepSeek 返回空响应');
+      }
+
+      // 解析 JSON
+      const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/);
+      const jsonText = jsonMatch ? jsonMatch[1] : content;
+      const analysis = JSON.parse(jsonText);
+
+      return `⚠️ [视觉分析超时] 使用 DeepSeek 分析音频转录
+
+分析状态:
+- 画面分析: 超时（>2分钟）
+- 音频转录: 已完成（${transcript.length}字）
+- 帧数: ${frameCount}帧
+- 时间范围: ${timeRange}
+
+DeepSeek 分析结果:
+- 情绪: ${analysis.emotion} (强度: ${analysis.intensity}/10)
+- 台词类型: ${analysis.dialogue_type}
+- 关键词: ${analysis.keywords.join('、')}
+- 语气: ${analysis.tone}
+- 分析: ${analysis.reasoning}
+
+视觉特征（缺失）:
+- ⚠️ 画面分析超时，无法提取表情、动作、镜头信息
+
+建议:
+- 该标记点主要依赖台词特征
+- 技能生成时降低视觉权重，提高台词权重
+- 人工复核时重点关注台词内容`;
+    } catch (error) {
+      // DeepSeek 也失败了，使用规则降级
+      console.warn(`  ⚠️ DeepSeek 分析失败: ${error}，使用规则降级`);
+      return this.ruleBasedFallbackAnalysis(transcript, frameCount, timestamps);
+    }
+  }
+
+  /**
+   * 规则降级分析（当 DeepSeek 也失败时）
+   */
+  private ruleBasedFallbackAnalysis(
+    transcript: string,
+    frameCount: number,
+    timestamps: number[]
+  ): string {
+    const timeRange = `${this.formatMs(timestamps[0])} - ${this.formatMs(timestamps[timestamps.length - 1])}`;
+
+    // 基于ASR文本进行简单规则分析
     const textLength = transcript.length;
     const hasExclamation = transcript.includes('！') || transcript.includes('!');
     const hasQuestion = transcript.includes('？') || transcript.includes('?');
@@ -459,15 +570,16 @@ export class TrainingExecutor {
       emotionIntensity = 6;
     }
 
-    return `⚠️ [视觉分析超时] 基于音频转录的简化分析
+    return `⚠️ [视觉分析超时] 基于规则的简化分析
 
 分析状态:
 - 画面分析: 超时（>2分钟）
+- DeepSeek: 调用失败
 - 音频转录: 已完成（${textLength}字）
 - 帧数: ${frameCount}帧
 - 时间范围: ${timeRange}
 
-基于台词推断的特征:
+基于台词规则推断:
 - 台词内容: "${transcript.substring(0, 100)}${textLength > 100 ? '...' : ''}"
 - 推断情绪: ${inferredEmotion} (强度: ${emotionIntensity}/10)
 - 台词特征: ${hasExclamation ? '感叹句结尾' : ''}${hasQuestion ? '疑问句' : ''}${hasNegativeWords ? '包含否定词' : ''}
@@ -476,9 +588,9 @@ export class TrainingExecutor {
 - ⚠️ 画面分析超时，无法提取表情、动作、镜头信息
 
 建议:
-- 该标记点主要依赖台词特征
-- 技能生成时降低视觉权重，提高台词权重
-- 人工复核时重点关注台词内容`;
+- 该标记点缺少视觉和AI分析
+- 技能生成时标记为"低置信度"
+- 建议人工复核`;
   }
 
   /**
