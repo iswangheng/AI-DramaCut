@@ -738,6 +738,57 @@ export const hlTrainingHistory = sqliteTable('hl_training_history', {
 });
 
 // ============================================
+// HL 11. 杭州雷鸣关键帧表 (hl_keyframes)
+// ============================================
+/**
+ * 关键帧表 - 杭州雷鸣专用
+ *
+ * 用途：存储视频的关键帧信息，用于 AI 分析
+ */
+export const hlKeyframes = sqliteTable('hl_keyframes', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  videoId: integer('video_id').notNull().references(() => hlVideos.id, { onDelete: 'cascade' }),  // 关联杭州雷鸣视频
+
+  // 关键帧信息
+  framePath: text('frame_path').notNull(),                   // 关键帧文件路径
+  timestampMs: integer('timestamp_ms').notNull(),             // 时间戳（毫秒）
+  frameNumber: integer('frame_number').notNull(),             // 帧序号
+  fileSize: integer('file_size'),                             // 文件大小（字节）
+
+  // 元数据
+  extractedAt: integer('extracted_at', { mode: 'timestamp' }).notNull(),  // 提取时间
+
+  ...timestamps,
+});
+
+// ============================================
+// HL 12. 杭州雷鸣音频转录表 (hl_audio_transcriptions)
+// ============================================
+/**
+ * 音频转录表 - 杭州雷鸣专用
+ *
+ * 用途：存储 Whisper 转录结果，用于训练分析
+ */
+export const hlAudioTranscriptions = sqliteTable('hl_audio_transcriptions', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  videoId: integer('video_id').notNull().references(() => hlVideos.id, { onDelete: 'cascade' }),  // 关联杭州雷鸣视频
+
+  // 转录结果
+  text: text('text').notNull(),                              // 完整转录文本
+  language: text('language').notNull(),                       // 检测到的语言（如 'zh', 'en'）
+  duration: integer('duration').notNull(),                    // 音频时长（秒）
+
+  // 分段信息（JSON 格式）
+  segments: text('segments').notNull(),                       // 转录分段（JSON 数组）
+
+  // 元数据
+  model: text('model').notNull(),                              // 使用的 Whisper 模型
+  processingTimeMs: integer('processing_time_ms'),            // 处理耗时（毫秒）
+
+  ...timestamps,
+});
+
+// ============================================
 // 杭州雷鸣类型导出
 // ============================================
 
@@ -771,6 +822,12 @@ export type NewHLGlobalSkill = typeof hlGlobalSkills.$inferInsert;
 export type HLTrainingHistory = typeof hlTrainingHistory.$inferSelect;
 export type NewHLTrainingHistory = typeof hlTrainingHistory.$inferInsert;
 
+export type HLKeyframe = typeof hlKeyframes.$inferSelect;
+export type NewHLKeyframe = typeof hlKeyframes.$inferInsert;
+
+export type HLAudioTranscription = typeof hlAudioTranscriptions.$inferSelect;
+export type NewHLAudioTranscription = typeof hlAudioTranscriptions.$inferInsert;
+
 // ============================================
 // Schema 对象统一导出
 // ============================================
@@ -800,4 +857,6 @@ export const schema = {
   hlExports,
   hlGlobalSkills,
   hlTrainingHistory,
+  hlKeyframes,
+  hlAudioTranscriptions,
 };

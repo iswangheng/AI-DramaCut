@@ -10,6 +10,19 @@ import { transcribeAudioSegment } from '../audio/transcriber';
 import { getGeminiClient } from '../api/gemini';
 import { PromptLoader, PROMPTS } from '../prompts/loader';
 import type { HLMarking, HLVideo } from '../db/schema';
+import { queries } from '../db/queries';
+import { eq } from 'drizzle-orm';
+import { trainingLogger } from './logger';
+
+// 全局变量：保存生成的技能文件路径
+let generatedSkillPath: string | null = null;
+
+/**
+ * 获取生成的技能文件路径（用于API保存到数据库）
+ */
+export function getGeneratedSkillPath(): string | null {
+  return generatedSkillPath;
+}
 
 // ============================================
 // 类型定义
@@ -58,6 +71,9 @@ export class TrainingExecutor {
   async execute(): Promise<void> {
     const { trainingId, markings, onProgress } = this.config;
 
+    trainingLogger.info(trainingId, `开始训练`, '初始化');
+    trainingLogger.info(trainingId, `共 ${markings.length} 个标记`, '初始化');
+
     console.log(`🚀 [训练中心] 开始训练，ID: ${trainingId}`);
     console.log(`📊 标记数量: ${markings.length}`);
 
@@ -65,28 +81,34 @@ export class TrainingExecutor {
       // ========================================
       // 阶段2: 提取视频特征（10% → 50%）
       // ========================================
+      trainingLogger.progress(trainingId, 10, '特征提取', '开始提取关键帧和ASR转录...');
       onProgress?.(10, '提取视频特征...');
       const markingsWithFeatures = await this.extractAllMarkingsFeatures(markings);
 
       // ========================================
       // 阶段3: AI深度分析（50% → 80%）
       // ========================================
+      trainingLogger.progress(trainingId, 50, 'AI分析', '开始AI深度分析标记点...');
       onProgress?.(50, 'AI深度分析标记点...');
       await this.analyzeAllMarkings(markingsWithFeatures);
 
       // ========================================
       // 阶段4: 生成技能文件（80% → 95%）
       // ========================================
+      trainingLogger.progress(trainingId, 80, '生成技能', '正在生成全局技能文件...');
       onProgress?.(80, '生成技能文件...');
       const skillContent = await this.generateSkillFile(markingsWithFeatures);
 
       // 保存技能文件
       const skillFileName = await this.saveSkillFile(skillContent);
 
+      trainingLogger.progress(trainingId, 95, '完成', `技能文件已生成: ${skillFileName}`);
+      trainingLogger.success(trainingId, '训练完成！', '完成');
       onProgress?.(95, '训练完成');
 
       console.log(`✅ [训练中心] 训练完成，技能文件: ${skillFileName}`);
     } catch (error) {
+      trainingLogger.error(trainingId, `训练失败: ${error instanceof Error ? error.message : String(error)}`, '失败');
       console.error(`❌ [训练中心] 训练失败:`, error);
       throw error;
     }
@@ -96,9 +118,11 @@ export class TrainingExecutor {
    * 阶段2: 批量提取视频特征
    */
   private async extractAllMarkingsFeatures(markings: HLMarking[]): Promise<MarkingAnalysisResult[]> {
-    const { concurrency = 5, onProgress } = this.config;
+    const { concurrency = 5, onProgress, trainingId } = this.config;
     const results: MarkingAnalysisResult[] = [];
     let skippedCount = 0;
+
+    trainingLogger.info(trainingId, `开始提取 ${markings.length} 个标记的特征`, '特征提取');
 
     // 分批并发处理
     for (let i = 0; i < markings.length; i += concurrency) {
@@ -106,6 +130,7 @@ export class TrainingExecutor {
       const batchNumber = Math.floor(i / concurrency) + 1;
       const totalBatches = Math.ceil(markings.length / concurrency);
 
+      trainingLogger.info(trainingId, `处理批次 ${batchNumber}/${totalBatches} (${batch.length}个标记)`, '特征提取');
       console.log(`\n📦 处理批次 ${batchNumber}/${totalBatches} (${batch.length}个标记)...`);
 
       const batchResults = await Promise.all(
@@ -114,6 +139,7 @@ export class TrainingExecutor {
             return await this.extractMarkingFeatures(marking);
           } catch (error) {
             // 跳过无效的标记点，但继续处理其他标记
+            trainingLogger.warning(trainingId, `跳过标记 ${marking.timestamp}: ${error instanceof Error ? error.message : error}`, '特征提取');
             console.warn(`  ⚠️  跳过标记 ID ${marking.id}: ${error instanceof Error ? error.message : error}`);
             skippedCount++;
             return null;
@@ -128,8 +154,10 @@ export class TrainingExecutor {
       // 更新进度（10% → 50%）
       const progress = 10 + Math.floor(((i + concurrency) / markings.length) * 40);
       onProgress?.(progress, `提取视频特征 (${results.length}/${markings.length})`);
+      trainingLogger.progress(trainingId, progress, '特征提取', `已完成 ${results.length}/${markings.length} 个标记`);
     }
 
+    trainingLogger.success(trainingId, `特征提取完成：成功 ${results.length} 个，跳过 ${skippedCount} 个`, '特征提取');
     console.log(`\n✅ 特征提取完成，成功 ${results.length} 个标记，跳过 ${skippedCount} 个`);
     return results;
   }
@@ -169,6 +197,23 @@ export class TrainingExecutor {
 
     console.log(`  ✅ 提取了 ${keyframes.framePaths.length} 帧关键帧`);
 
+    // ✅ 保存关键帧到数据库（hl_keyframes 表）
+    try {
+      const keyframeRecords = keyframes.framePaths.map((framePath, index) => ({
+        videoId: marking.videoId,
+        framePath,
+        timestampMs: keyframes.timestamps[index],
+        frameNumber: index + 1,
+        fileSize: undefined, // 可选：可以读取文件大小
+      }));
+
+      await queries.hlKeyframe.createBatch(keyframeRecords);
+      console.log(`  💾 已保存 ${keyframeRecords.length} 帧关键帧到数据库`);
+    } catch (error) {
+      console.warn(`  ⚠️  保存关键帧到数据库失败:`, error);
+      // 继续执行，不中断训练流程
+    }
+
     // 转录音频（标记点前后10秒）
     const asrWindowSeconds = 10;
     const asrStartMs = (marking.seconds - asrWindowSeconds) * 1000;
@@ -180,10 +225,39 @@ export class TrainingExecutor {
       video.filePath,
       Math.max(0, asrStartMs),
       asrEndMs,
-      { model: 'tiny', language: 'zh' }
+      { model: 'base', language: 'zh' }
     );
 
     console.log(`  ✅ 转录完成: ${asr.text.length}字, ${asr.segments.length}个片段`);
+
+    // ✅ 保存ASR转录到数据库（hl_audio_transcriptions 表）
+    // 检查是否已存在转录记录
+    const existingTranscription = await queries.hlAudioTranscription.getByVideoId(marking.videoId);
+
+    if (!existingTranscription) {
+      try {
+        // 计算音频时长（从ASR片段推算）
+        const calculatedDuration = asr.segments.length > 0
+          ? Math.round((asr.segments[asr.segments.length - 1].end - asr.segments[0].start))
+          : Math.round(asr.duration || 0);
+
+        await queries.hlAudioTranscription.create({
+          videoId: marking.videoId,
+          text: asr.text,
+          language: asr.language,
+          duration: calculatedDuration > 0 ? calculatedDuration : 20, // 默认20秒
+          segments: JSON.stringify(asr.segments),
+          model: 'base',
+          processingTimeMs: undefined, // 可选：记录处理时间
+        });
+        console.log(`  💾 已保存ASR转录到数据库 (时长: ${calculatedDuration}秒)`);
+      } catch (error) {
+        console.warn(`  ⚠️  保存ASR转录到数据库失败:`, error);
+        // 继续执行，不中断训练流程
+      }
+    } else {
+      console.log(`  ℹ️  该视频已有ASR转录记录，跳过保存`);
+    }
 
     return {
       marking,
@@ -240,7 +314,7 @@ export class TrainingExecutor {
     console.log(`  📸 分析关键帧 (${keyframes.framePaths.length}帧)...`);
     const frameAnalysis = await this.analyzeKeyframesWithGemini(keyframes, relevantText);
 
-    // 3. 调用Gemini综合分析
+    // 3. 调用Gemini综合分析（带降级方案）
     console.log(`  🤖 Gemini综合分析...`);
 
     // 加载Prompt
@@ -259,17 +333,28 @@ export class TrainingExecutor {
       frame_count: keyframes.framePaths.length,
     });
 
-    // 调用Gemini
-    const response = await this.geminiClient.callApi(prompt);
+    let analysis: any;
 
-    if (!response.success || !response.data) {
-      throw new Error(`Gemini分析失败: ${response.error}`);
+    try {
+      // 尝试调用Gemini
+      const response = await this.geminiClient.callApi(prompt);
+
+      if (!response.success || !response.data) {
+        throw new Error(`Gemini分析失败: ${response.error}`);
+      }
+
+      // 解析JSON响应
+      analysis = this.parseJsonResponse(response.data as string);
+      console.log(`  ✅ Gemini分析完成`);
+
+    } catch (geminiError) {
+      // ⚠️ Gemini失败，使用DeepSeek降级方案
+      console.warn(`  ⚠️ Gemini综合分析失败: ${geminiError instanceof Error ? geminiError.message : geminiError}`);
+      console.log(`  🔄 降级到DeepSeek分析...`);
+
+      analysis = await this.analyzeWithDeepSeekFallback(prompt, marking, relevantText, frameAnalysis);
+      console.log(`  ✅ DeepSeek分析完成（降级方案）`);
     }
-
-    // 解析JSON响应
-    const analysis = this.parseJsonResponse(response.data as string);
-
-    console.log(`  ✅ 分析完成`);
 
     return analysis;
   }
@@ -357,7 +442,9 @@ export class TrainingExecutor {
       const apiKey = geminiConfig.apiKey;
       const endpoint = geminiConfig.endpoint || 'https://yunwu.ai';
 
-      const apiUrl = `${endpoint}/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
+      // 使用支持视觉理解的模型（gemini-2.5-flash 或 gemini-pro）
+      const visionModel = 'gemini-2.5-flash'; // 可用性更好的模型
+      const apiUrl = `${endpoint}/v1beta/models/${visionModel}:generateContent?key=${apiKey}`;
 
       console.log(`  🚀 调用 Gemini Vision API (批量分析 ${imagesData.length} 帧)...`);
 
@@ -456,17 +543,20 @@ export class TrainingExecutor {
 **对白内容**：
 ${transcript}
 
-**请分析并返回 JSON**：
-\`\`\`json
+**要求**：
+1. 只返回纯 JSON 格式，不要包含任何其他文字说明
+2. 不要使用 Markdown 代码块标记
+3. 直接以 { 开始，以 } 结束
+
+**返回 JSON 格式**：
 {
-  "emotion": "情绪类型（愤怒/激动/悲伤/疑惑/平静）",
-  "intensity": 情绪强度（0-10的数字）,
-  "dialogue_type": "台词类型（指责/告白/威胁/解释/质疑/命令）",
-  "keywords": ["关键词1", "关键词2", "关键词3"],
-  "tone": "语气描述",
-  "reasoning": "简短分析（50字以内）"
-}
-\`\`\``;
+  "emotion": "情绪类型",
+  "intensity": 情绪强度（0-10数字）,
+  "dialogue_type": "台词类型",
+  "keywords": ["关键词"],
+  "tone": "语气",
+  "reasoning": "简短分析"
+}`;
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
@@ -478,15 +568,20 @@ ${transcript}
           'Authorization': `Bearer ${apiKey}`, // 使用 Authorization header
         },
         body: JSON.stringify({
-          model: 'deepseek-chat', // 使用 deepseek-chat（更通用）
+          model: 'deepseek-chat',
           messages: [
+            {
+              role: 'system',
+              content: '你是专业的短剧剪辑分析师，擅长分析对白中的情绪和特征。请按照用户要求的格式输出分析结果，只输出纯JSON，不要包含任何其他文字、思考过程或Markdown标记。'
+            },
             {
               role: 'user',
               content: prompt,
             },
           ],
-          temperature: 0.7,
-          max_tokens: 500,
+          temperature: 0.3,
+          max_tokens: 300,
+          reasoning_mode: false,
         }),
         signal: controller.signal,
       });
@@ -595,16 +690,26 @@ DeepSeek 分析结果:
   }
 
   /**
-   * 阶段4: 生成技能文件
+   * 阶段4: 生成技能文件（螺旋式综合更新）
    */
   private async generateSkillFile(results: MarkingAnalysisResult[]): Promise<string> {
-    console.log(`\n📝 生成技能文件...`);
+    console.log(`\n📝 生成技能文件（螺旋式综合更新）...`);
+
+    // 🌀 读取现有技能文件
+    const existingSkill = await this.loadLatestSkillFile();
+    if (existingSkill) {
+      console.log(`  📚 已加载现有技能文件（版本: ${existingSkill.version}，${existingSkill.content.length}字）`);
+    } else {
+      console.log(`  📝 未找到现有技能文件，这是首次训练`);
+    }
 
     // 按台词类型聚类
     const clusters = this.clusterMarkingsByDialogueType(results);
 
     // 生成版本号
-    const version = `v1.${Date.now()}`;
+    const version = existingSkill
+      ? `v1.${Date.now()}`  // 从现有版本迭代
+      : `v1.${Date.now()}`; // 首次训练
 
     // 加载Prompt
     const promptTemplate = await PromptLoader.load(PROMPTS.TRAINING.GENERATE_SKILL);
@@ -621,11 +726,13 @@ DeepSeek 分析结果:
       highlight_count: results.filter(r => r.marking.type === '高光点').length,
       hook_count: results.filter(r => r.marking.type === '钩子点').length,
       total_analyses: results.length,
+      existing_skill: existingSkill ? existingSkill.content : null,  // 传入现有技能内容
+      existing_version: existingSkill ? existingSkill.version : null,    // 传入现有版本号
       ...clusterData,
     });
 
     // 调用Gemini生成技能文件
-    console.log(`  🤖 调用Gemini生成技能文件...`);
+    console.log(`  🤖 调用Gemini生成技能文件（螺旋式综合）...`);
     const response = await this.geminiClient.callApi(prompt);
 
     if (!response.success || !response.data) {
@@ -636,7 +743,53 @@ DeepSeek 分析结果:
 
     console.log(`  ✅ 技能文件生成完成 (${skillContent.length}字)`);
 
+    if (existingSkill) {
+      const sizeDiff = skillContent.length - existingSkill.content.length;
+      console.log(`  📊 相比上一版本 (${existingSkill.version}): ${sizeDiff > 0 ? '+' : ''}${sizeDiff}字`);
+    }
+
     return skillContent;
+  }
+
+  /**
+   * 加载最新的技能文件
+   */
+  private async loadLatestSkillFile(): Promise<{ version: string; content: string } | null> {
+    try {
+      const { readdir } = await import('fs/promises');
+      const { join } = await import('path');
+
+      const skillsDir = join(process.cwd(), 'data', 'hangzhou-leiming', 'skills');
+
+      // 读取所有技能文件
+      const files = await readdir(skillsDir);
+      const skillFiles = files
+        .filter(f => f.startsWith('skill_') && f.endsWith('.md'))
+        .map(f => ({
+          name: f,
+          path: join(skillsDir, f),
+          time: parseInt(f.split('_')[2]?.split('.')[0] || '0'),
+        }))
+        .sort((a, b) => b.time - a.time); // 按时间倒序排列
+
+      if (skillFiles.length === 0) {
+        return null;
+      }
+
+      // 读取最新的技能文件
+      const latestFile = skillFiles[0];
+      const { readFile } = await import('fs/promises');
+      const content = await readFile(latestFile.path, 'utf-8');
+
+      // 提取版本号
+      const versionMatch = latestFile.name.match(/skill_(v\d+\.\d+)_/);
+      const version = versionMatch ? versionMatch[1] : 'unknown';
+
+      return { version, content };
+    } catch (error) {
+      console.warn(`  ⚠️  读取现有技能文件失败:`, error);
+      return null;
+    }
   }
 
   /**
@@ -658,6 +811,9 @@ DeepSeek 分析结果:
     await writeFile(filePath, content, 'utf-8');
 
     console.log(`💾 技能文件已保存: ${filePath}`);
+
+    // 保存到全局变量，供API使用
+    generatedSkillPath = filePath;
 
     return fileName;
   }
@@ -755,6 +911,95 @@ DeepSeek 分析结果:
       console.error(`❌ JSON解析失败: ${error}`);
       console.error(`响应内容（前500字符）: ${text.substring(0, 500)}...`);
       throw new Error('JSON解析失败');
+    }
+  }
+
+  /**
+   * DeepSeek降级方案分析
+   * 当Gemini失败时使用DeepSeek进行分析
+   */
+  private async analyzeWithDeepSeekFallback(
+    prompt: string,
+    marking: HLMarking,
+    relevantText: string,
+    frameAnalysis: string
+  ): Promise<any> {
+    try {
+      // 调用DeepSeek API
+      const deepseekConfig = await import('../config').then(m => m.deepseekConfig);
+      const apiUrl = 'https://api.deepseek.com/chat/completions';
+
+      const requestBody = {
+        model: 'deepseek-chat',
+        messages: [
+          {
+            role: 'system',
+            content: '你是专业的短剧剪辑分析师，擅长分析对白和视觉内容。请按照用户要求的格式输出分析结果，只输出纯JSON，不要包含任何其他文字、思考过程或Markdown标记。'
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.3,
+        max_tokens: 300,
+        reasoning_mode: false,  // 禁用思考过程，只返回结果
+      };
+
+      console.log(`  🚀 调用DeepSeek API...`);
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${deepseekConfig.apiKey}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`DeepSeek API错误: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      const analysisText = result.choices?.[0]?.message?.content || '';
+
+      if (!analysisText) {
+        throw new Error('DeepSeek返回空响应');
+      }
+
+      // 解析JSON响应
+      const analysis = this.parseJsonResponse(analysisText);
+
+      return analysis;
+
+    } catch (error) {
+      console.error(`  ❌ DeepSeek降级也失败了: ${error instanceof Error ? error.message : error}`);
+
+      // 最后的兜底：返回基础分析结果
+      console.log(`  ⚠️ 使用最基础的兜底方案...`);
+
+      return {
+        type: marking.type,
+        timestamp: marking.timestamp,
+        dialogue: {
+          type: '未分类（API失败）',
+          content: relevantText.substring(0, 100) || '无对白',
+        },
+        visual: {
+          scene: frameAnalysis.substring(0, 200) || '无视觉分析',
+          key_elements: ['API降级'],
+        },
+        viral_potential: {
+          score: 5,
+          reason: 'API失败，使用降级方案，无法准确评估',
+        },
+        editing_suggestions: [
+          '保持原有时长',
+          '注意节奏',
+        ],
+      };
     }
   }
 

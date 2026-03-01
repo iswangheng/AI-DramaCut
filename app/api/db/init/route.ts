@@ -4,7 +4,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { dbClient } from '@/lib/db';
+import { dbClient } from '@/lib/db/client';
 
 export async function POST(request: NextRequest) {
   try {

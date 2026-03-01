@@ -316,8 +316,7 @@ async function extractAudioSegment(
   const duration = (endMs - startMs) / 1000;
 
   // 使用 ffmpeg 提取音频片段
-  const ffmpegCommand = [
-    'ffmpeg',
+  const ffmpegArgs = [
     '-ss', startTime.toString(),      // 跳转到开始时间
     '-i', videoPath,                  // 输入文件
     '-t', duration.toString(),        // 持续时间
@@ -333,7 +332,7 @@ async function extractAudioSegment(
 
   await new Promise<void>((resolve, reject) => {
     const { spawn } = require('child_process');
-    const ffmpeg = spawn('ffmpeg', ffmpegCommand);
+    const ffmpeg = spawn('ffmpeg', ffmpegArgs);
     let stderr = '';
 
     ffmpeg.stderr.on('data', (data: Buffer) => {

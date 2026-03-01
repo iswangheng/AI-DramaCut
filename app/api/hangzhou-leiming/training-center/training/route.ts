@@ -169,6 +169,47 @@ async function executeTraining(
 
     console.log(`[训练中心] 训练完成，ID: ${trainingId}`);
 
+    // ========================================
+    // 保存技能文件到数据库
+    // ========================================
+    console.log(`[训练中心] 保存技能文件到数据库...`);
+
+    // 查询生成的技能文件路径（从 TrainingExecutor 获取）
+    const { getGeneratedSkillPath } = await import('@/lib/training/executor');
+    const skillFilePath = getGeneratedSkillPath();
+
+    if (!skillFilePath || !existsSync(skillFilePath)) {
+      throw new Error('技能文件生成失败，文件不存在');
+    }
+
+    // 生成版本号
+    const [latestSkill] = await db
+      .select()
+      .from(hlGlobalSkills)
+      .orderBy(desc(hlGlobalSkills.createdAt))
+      .limit(1);
+
+    const versionNumber = latestSkill
+      ? (parseFloat(latestSkill.version.replace("v", "")) + 0.1).toFixed(1)
+      : "1.0";
+    const version = `v${versionNumber}`;
+
+    // 创建技能记录
+    const [newSkill] = await db
+      .insert(hlGlobalSkills)
+      .values({
+        version,
+        skillFilePath,
+        totalProjects: projects.length,
+        totalVideos: allMarkings.length, // 暂时使用标记数作为视频数的估计
+        totalMarkings: allMarkings.length,
+        trainingProjectIds: JSON.stringify(projects.map((p) => p.id)),
+        status: "ready",
+      })
+      .returning();
+
+    console.log(`[训练中心] 技能记录创建成功，ID: ${newSkill.id}, 版本: ${version}`);
+
     // 更新训练历史记录为完成状态
     await db
       .update(hlTrainingHistory)
@@ -176,6 +217,10 @@ async function executeTraining(
         status: "completed",
         progress: 100,
         currentStep: "训练完成",
+        skillVersion: version,
+        skillId: newSkill.id,
+        totalVideosProcessed: allMarkings.length,
+        totalMarkingsLearned: allMarkings.length,
         completedAt: new Date(),
       })
       .where(eq(hlTrainingHistory.id, trainingId));

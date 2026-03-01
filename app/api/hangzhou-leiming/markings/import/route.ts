@@ -37,13 +37,16 @@ export async function POST(req: NextRequest) {
 
     const projectId = parseInt(projectIdStr);
 
-    // ✅ 保存原始Excel文件到磁盘
+    // ✅ 保存原始Excel文件到磁盘（保持原文件名）
     const projectDir = join(process.cwd(), "data", "hangzhou-leiming", String(projectId));
     const excelDir = join(projectDir, "excel");
     await mkdir(excelDir, { recursive: true });
 
+    // 使用原文件名（添加时间戳前缀避免覆盖）
     const timestamp = Date.now();
-    const excelFilename = `markings_${timestamp}.xlsx`;
+    // 只清理真正危险的特殊字符（Windows不允许的文件名字符），保留中文
+    const originalName = file.name.replace(/[<>:"/\\|?*]/g, '_');
+    const excelFilename = `${timestamp}_${originalName}`;
     const excelPath = join(excelDir, excelFilename);
 
     const bytes = await file.arrayBuffer();
@@ -75,6 +78,18 @@ export async function POST(req: NextRequest) {
     const markingsToInsert = [];
     let successCount = 0;
     let errorCount = 0;
+    let duplicateCount = 0;
+
+    // ⚠️ 获取现有标记，用于去重
+    const existingMarkings = await db
+      .select()
+      .from(hlMarkings)
+      .where(eq(hlMarkings.projectId, projectId));
+
+    // 构建去重集合：key = `${videoId}_${seconds}_${type}`
+    const existingMarkingsSet = new Set(
+      existingMarkings.map((m: any) => `${m.videoId}_${m.seconds}_${m.type}`)
+    );
 
     for (const row of data as any[]) {
       try {
@@ -107,6 +122,14 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
+        // ⚠️ 去重检查：跳过已存在的标记
+        const markingKey = `${video.id}_${seconds}_${type}`;
+        if (existingMarkingsSet.has(markingKey)) {
+          console.log(`跳过重复标记: 第${episode}集 ${timestamp} (${type})`);
+          duplicateCount++;
+          continue;
+        }
+
         markingsToInsert.push({
           projectId,
           videoId: video.id,
@@ -134,9 +157,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `导入完成！成功 ${successCount} 条，失败 ${errorCount} 条`,
+      message: `导入完成！成功 ${successCount} 条，重复 ${duplicateCount} 条（已跳过），失败 ${errorCount} 条`,
       data: {
         successCount,
+        duplicateCount,
         errorCount,
         total: data.length,
       },

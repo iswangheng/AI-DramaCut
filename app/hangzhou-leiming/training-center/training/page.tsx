@@ -23,6 +23,7 @@ import {
   CheckCircle,
   Loader2,
   Download,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +45,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { HangzhouLeimingLayout } from "@/components/hangzhou-leiming-layout";
+import { TrainingLogs } from "@/components/training-logs";
 
 interface Project {
   id: number;
@@ -94,6 +96,8 @@ export default function TrainingPage() {
   // 步骤3：上传Excel
   const [uploadedExcel, setUploadedExcel] = useState<File | null>(null);
   const [excelUploading, setExcelUploading] = useState(false);
+  const [existingExcelFiles, setExistingExcelFiles] = useState<any[]>([]);
+  const [loadingExcels, setLoadingExcels] = useState(false);
 
   // 步骤4：训练
   const [training, setTraining] = useState(false);
@@ -115,7 +119,55 @@ export default function TrainingPage() {
       console.error("加载项目视频失败:", error);
     }
 
+    // 加载该项目的已有Excel文件
+    await loadExcelFiles(project.id);
+
     setStep(2); // 进入步骤2：上传视频
+  };
+
+  // 加载Excel文件列表
+  const loadExcelFiles = async (projectId: number) => {
+    try {
+      setLoadingExcels(true);
+      const res = await fetch(`/api/hangzhou-leiming/projects/${projectId}/excel-files`);
+      const result = await res.json();
+      if (result.success) {
+        const files = result.data.files || [];
+        setExistingExcelFiles(files);
+        return files.length; // 返回文件数量
+      }
+      return 0;
+    } catch (error) {
+      console.error("加载Excel文件失败:", error);
+      return 0;
+    } finally {
+      setLoadingExcels(false);
+    }
+  };
+
+  // 删除Excel文件
+  const handleDeleteExcel = async (filename: string) => {
+    if (!currentProject) return;
+
+    if (!confirm("确定要删除这个Excel文件吗？")) return;
+
+    try {
+      const res = await fetch(`/api/hangzhou-leiming/projects/${currentProject.id}/excel-files/${filename}`, {
+        method: "DELETE",
+      });
+
+      const result = await res.json();
+
+      if (result.success) {
+        // 重新加载Excel文件列表
+        await loadExcelFiles(currentProject.id);
+      } else {
+        alert(`删除失败：${result.message}`);
+      }
+    } catch (error) {
+      console.error("删除Excel文件失败:", error);
+      alert("删除Excel文件失败，请稍后重试");
+    }
   };
 
   // 创建项目
@@ -201,7 +253,14 @@ export default function TrainingPage() {
       if (result.success) {
         setUploadedExcel(file);
         setExcelUploading(false);
-        setStep(4); // 进入步骤4：开始训练
+
+        // 重新加载Excel文件列表并获取数量
+        const fileCount = await loadExcelFiles(currentProject.id);
+
+        // 如果上传成功，自动进入下一步
+        if (fileCount > 0) {
+          setStep(4);
+        }
       } else {
         alert(`上传失败：${result.message}`);
         setExcelUploading(false);
@@ -233,6 +292,9 @@ export default function TrainingPage() {
 
       if (result.success) {
         const trainingId = result.data.trainingId;
+
+        // 保存trainingId供日志组件使用
+        (window as any).currentTrainingId = trainingId;
 
         // 轮询获取训练进度
         const pollInterval = setInterval(async () => {
@@ -549,6 +611,48 @@ export default function TrainingPage() {
                   />
                 </div>
 
+                {/* 已上传的Excel文件列表 */}
+                {existingExcelFiles.length > 0 && (
+                  <div className="border rounded-lg p-4">
+                    <h4 className="font-semibold mb-3">已上传的Excel文件 ({existingExcelFiles.length})</h4>
+                    <div className="space-y-2">
+                      {existingExcelFiles.map((file) => (
+                        <div key={file.filename} className="flex items-center gap-3 p-2 bg-slate-50 rounded">
+                          <FileSpreadsheet className="w-5 h-5 text-green-600" />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium truncate">{file.originalName || file.filename}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {file.uploadTimeFormatted} · {file.fileSizeFormatted}
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => window.open(file.downloadUrl, '_blank')}
+                            className="cursor-pointer"
+                          >
+                            <Download className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteExcel(file.filename)}
+                            className="cursor-pointer hover:bg-red-50 hover:text-red-600"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                    <Button
+                      onClick={() => setStep(4)}
+                      className="w-full mt-4 cursor-pointer"
+                    >
+                      下一步：开始训练
+                    </Button>
+                  </div>
+                )}
+
                 {uploadedExcel && (
                   <div className="border rounded-lg p-4">
                     <div className="flex items-center gap-3">
@@ -604,34 +708,71 @@ export default function TrainingPage() {
                       <div>
                         <span className="text-muted-foreground">标记文件：</span>
                         <span className="font-medium">
-                          {uploadedExcel ? "已上传" : "未上传"}
+                          {existingExcelFiles.length > 0 ? `已上传 (${existingExcelFiles.length}个)` : "未上传"}
                         </span>
                       </div>
                     </div>
                   </div>
 
+                  {/* 显示已上传的Excel文件 */}
+                  {existingExcelFiles.length > 0 && (
+                    <div className="border rounded-lg p-3 bg-slate-50">
+                      <h5 className="text-sm font-medium mb-2">已上传的标记文件：</h5>
+                      <div className="space-y-1">
+                        {existingExcelFiles.map((file) => (
+                          <div key={file.filename} className="text-xs flex items-center gap-2">
+                            <FileSpreadsheet className="w-3 h-3 text-green-600" />
+                            <span className="truncate flex-1">{file.originalName || file.filename}</span>
+                            <span className="text-muted-foreground">{file.fileSizeFormatted}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 开始训练按钮 */}
                   {!training && trainingProgress === 0 && (
-                    <Button
-                      onClick={handleStartTraining}
-                      className="w-full cursor-pointer bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
-                    >
-                      <Play className="w-4 h-4 mr-2" />
-                      开始训练
-                    </Button>
+                    <div className="space-y-2">
+                      <Button
+                        onClick={handleStartTraining}
+                        disabled={uploadedVideos.length === 0 || existingExcelFiles.length === 0}
+                        className="w-full cursor-pointer bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Play className="w-4 h-4 mr-2" />
+                        开始训练
+                      </Button>
+                      {uploadedVideos.length === 0 && (
+                        <p className="text-xs text-orange-600 text-center">⚠️ 请先上传视频</p>
+                      )}
+                      {existingExcelFiles.length === 0 && (
+                        <p className="text-xs text-orange-600 text-center">⚠️ 请先上传标记文件</p>
+                      )}
+                    </div>
                   )}
 
                   {training && (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span>训练进度</span>
-                        <span className="font-medium">{trainingProgress}%</span>
+                    <div className="space-y-4">
+                      {/* 进度条 */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span>训练进度</span>
+                          <span className="font-medium">{trainingProgress}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-gradient-to-r from-orange-500 to-red-500 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${trainingProgress}%` }}
+                          />
+                        </div>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-gradient-to-r from-orange-500 to-red-500 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${trainingProgress}%` }}
-                        />
-                      </div>
+
+                      {/* 实时日志 */}
+                      <TrainingLogs
+                        trainingId={(window as any).currentTrainingId || null}
+                        isTraining={training}
+                      />
+
+                      {/* 完成提示 */}
                       {trainingProgress === 100 && (
                         <div className="text-center py-4">
                           <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-2" />

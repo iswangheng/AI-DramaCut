@@ -116,20 +116,26 @@ export function HangzhouLeimingNavbar({
   // 获取当前活跃的导航项
   const getActiveItemId = () => {
     if (isInTrainingCenter) {
-      // 训练中心的子页面
+      // 训练中心的子页面（按精确度排序，越精确的越靠前）
+      if (pathname === "/hangzhou-leiming/training-center/skills") return "skills";
+      if (pathname === "/hangzhou-leiming/training-center/history") return "history";
+      if (pathname === "/hangzhou-leiming/training-center/training") return "training";
       if (pathname === "/hangzhou-leiming/training-center") return "training-center";
-      if (pathname.includes("/training")) return "training";
-      if (pathname.includes("/skills")) return "skills";
-      if (pathname.includes("/history")) return "history";
+
+      // 兼容带查询参数的情况
+      if (pathname.startsWith("/hangzhou-leiming/training-center/skills")) return "skills";
+      if (pathname.startsWith("/hangzhou-leiming/training-center/history")) return "history";
+      if (pathname.startsWith("/hangzhou-leiming/training-center/training")) return "training";
+
       return "training-center";
     }
 
     if (isInProjectPage) {
       // 项目详情页的子页面
-      if (pathname.includes("/videos")) return "videos";
-      if (pathname.includes("/markings")) return "markings";
-      if (pathname.includes("/smart-editor")) return "smart-editor";
-      if (pathname.includes("/export")) return "export";
+      if (pathname.endsWith("/videos")) return "videos";
+      if (pathname.endsWith("/markings")) return "markings";
+      if (pathname.endsWith("/smart-editor")) return "smart-editor";
+      if (pathname.endsWith("/export")) return "export";
       return "project-detail";
     }
 

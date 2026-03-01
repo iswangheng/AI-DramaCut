@@ -10,6 +10,8 @@ import {
   CheckCircle,
   Loader2,
   FileVideo,
+  Images,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,6 +65,22 @@ export function VideosTabContent({
   const [selectedVideo, setSelectedVideo] = useState<HLVideo | null>(null);
   const [playVideoDialogOpen, setPlayVideoDialogOpen] = useState(false);
   const [playingVideo, setPlayingVideo] = useState<HLVideo | null>(null);
+  const [mediaDataDialogOpen, setMediaDataDialogOpen] = useState(false);
+  const [mediaData, setMediaData] = useState<any>(null);
+  const [loadingMediaData, setLoadingMediaData] = useState(false);
+
+  // 关键帧hover浮窗状态
+  const [hoverPreview, setHoverPreview] = useState<{
+    show: boolean;
+    imageUrl: string;
+    x: number;
+    y: number;
+  }>({
+    show: false,
+    imageUrl: '',
+    x: 0,
+    y: 0,
+  });
 
   useEffect(() => {
     loadVideos();
@@ -163,6 +181,35 @@ export function VideosTabContent({
     setPlayVideoDialogOpen(true);
   };
 
+  const handleViewMediaData = async () => {
+    if (!projectId) return;
+
+    try {
+      setLoadingMediaData(true);
+      setMediaDataDialogOpen(true);
+
+      // 添加时间戳参数避免浏览器缓存
+      const cacheBuster = Date.now();
+      const res = await fetch(
+        `/api/hangzhou-leiming/projects/${projectId}/media-data?_=${cacheBuster}`
+      );
+      const result = await res.json();
+
+      if (result.success) {
+        setMediaData(result.data);
+      } else {
+        alert(`加载素材数据失败：${result.message}`);
+        setMediaDataDialogOpen(false);
+      }
+    } catch (error) {
+      console.error("加载素材数据失败:", error);
+      alert("加载素材数据失败，请稍后重试");
+      setMediaDataDialogOpen(false);
+    } finally {
+      setLoadingMediaData(false);
+    }
+  };
+
   const formatFileSize = (bytes: number) => {
     if (!bytes) return "-";
     if (bytes < 1024) return bytes + " B";
@@ -179,6 +226,33 @@ export function VideosTabContent({
     return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
   };
 
+  // 关键帧hover处理
+  const handleKeyframeMouseEnter = (imagePath: string, event: React.MouseEvent) => {
+    setHoverPreview({
+      show: true,
+      imageUrl: imagePath,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  };
+
+  const handleKeyframeMouseLeave = () => {
+    setHoverPreview({
+      show: false,
+      imageUrl: '',
+      x: 0,
+      y: 0,
+    });
+  };
+
+  const handleKeyframeMouseMove = (event: React.MouseEvent) => {
+    setHoverPreview((prev) => ({
+      ...prev,
+      x: event.clientX,
+      y: event.clientY,
+    }));
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -188,31 +262,43 @@ export function VideosTabContent({
             {projectName} - 管理项目下的所有视频
           </p>
         </div>
-        <Button
-          onClick={() => document.getElementById('video-upload')?.click()}
-          className="cursor-pointer bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
-          disabled={uploading}
-        >
-          {uploading ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              上传中...
-            </>
-          ) : (
-            <>
-              <Upload className="w-4 h-4 mr-2" />
-              上传视频
-            </>
-          )}
-        </Button>
-        <input
-          id="video-upload"
-          type="file"
-          accept="video/*"
-          multiple
-          className="hidden"
-          onChange={(e) => handleUpload(e.target.files)}
-        />
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleViewMediaData}
+            className="cursor-pointer"
+            disabled={loadingMediaData}
+          >
+            <Images className="w-4 h-4 mr-2" />
+            查看素材数据
+          </Button>
+          <Button
+            onClick={() => document.getElementById('video-upload')?.click()}
+            className="cursor-pointer bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+            disabled={uploading}
+          >
+            {uploading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                上传中...
+              </>
+            ) : (
+              <>
+                <Upload className="w-4 h-4 mr-2" />
+                上传视频
+              </>
+            )}
+          </Button>
+          <input
+            id="video-upload"
+            type="file"
+            accept="video/*"
+            multiple
+            className="hidden"
+            onChange={(e) => handleUpload(e.target.files)}
+          />
+        </div>
       </div>
 
       {loading ? (
@@ -378,6 +464,210 @@ export function VideosTabContent({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 素材数据查看对话框 */}
+      <Dialog
+        open={mediaDataDialogOpen}
+        onOpenChange={(open) => {
+          setMediaDataDialogOpen(open);
+          if (!open) {
+            setMediaData(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>项目素材数据</DialogTitle>
+            <DialogDescription>
+              查看项目所有视频的关键帧和ASR转录数据
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-4">
+            {loadingMediaData ? (
+              <div className="flex items-center justify-center h-64">
+                <Loader2 className="w-8 h-8 animate-spin text-orange-600" />
+              </div>
+            ) : mediaData ? (
+              <div className="space-y-6">
+                {/* 统计信息 */}
+                <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 rounded-lg">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-orange-600">
+                      {mediaData.stats.totalVideos}
+                    </div>
+                    <div className="text-sm text-muted-foreground">总视频数</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {mediaData.stats.videosWithKeyframes}
+                    </div>
+                    <div className="text-sm text-muted-foreground">已提取关键帧</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {mediaData.stats.videosWithAsr}
+                    </div>
+                    <div className="text-sm text-muted-foreground">已转录ASR</div>
+                  </div>
+                </div>
+
+                {/* 视频列表 */}
+                <div className="space-y-4">
+                  {mediaData.videos.map((video: any) => (
+                    <Card key={video.videoId}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-base">
+                            {video.displayTitle}
+                          </CardTitle>
+                          <div className="flex items-center gap-2">
+                            {video.keyframes.hasData && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
+                                <Images className="w-3 h-3" />
+                                {video.keyframes.count} 帧
+                              </span>
+                            )}
+                            {video.asr.hasData && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                                <FileText className="w-3 h-3" />
+                                ASR
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <CardDescription className="text-xs">
+                          {video.episodeNumber} · {video.durationSeconds}秒
+                        </CardDescription>
+                      </CardHeader>
+
+                      <CardContent className="space-y-4">
+                        {/* 关键帧预览 */}
+                        {video.keyframes.hasData && (
+                          <div>
+                            <h4 className="text-sm font-medium mb-2">关键帧预览</h4>
+                            <div className="grid grid-cols-5 gap-2">
+                              {video.keyframes.preview.map((kf: any, index: number) => {
+                                // 修复图片路径：确保从public目录正确加载
+                                const imagePath = kf.framePath.startsWith('/')
+                                  ? kf.framePath  // 已经是相对路径，直接使用
+                                  : `/${kf.framePath}`;  // 添加前导斜杠
+
+                                return (
+                                  <div
+                                    key={kf.id}
+                                    className="relative group cursor-pointer"
+                                    onMouseEnter={(e) => handleKeyframeMouseEnter(imagePath, e)}
+                                    onMouseLeave={handleKeyframeMouseLeave}
+                                    onMouseMove={handleKeyframeMouseMove}
+                                  >
+                                    {kf.exists ? (
+                                      <>
+                                        <img
+                                          src={imagePath}
+                                          alt={`帧 ${kf.frameNumber}`}
+                                          className="w-full h-20 object-cover rounded border transition-transform group-hover:scale-105"
+                                          onError={(e) => {
+                                            // 图片加载失败时隐藏图片并显示占位符
+                                            const img = e.target as HTMLImageElement;
+                                            img.style.display = 'none';
+                                            // 查找并显示占位符（通过类名）
+                                            const parent = img.parentElement;
+                                            if (parent) {
+                                              const placeholder = parent.querySelector('.img-error-placeholder');
+                                              if (placeholder) {
+                                                (placeholder as HTMLElement).classList.remove('hidden');
+                                              }
+                                            }
+                                          }}
+                                        />
+                                        {/* 图片加载失败的占位符（默认隐藏） */}
+                                        <div className="hidden absolute inset-0 bg-gray-100 rounded border flex items-center justify-center text-xs text-gray-400 img-error-placeholder">
+                                          加载失败
+                                        </div>
+                                        {/* Hover时显示的提示 */}
+                                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity rounded flex items-center justify-center pointer-events-none">
+                                          <span className="text-white text-xs">悬停查看大图</span>
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <div className="w-full h-20 bg-gray-100 rounded border flex items-center justify-center text-xs text-gray-400">
+                                        缺失
+                                      </div>
+                                    )}
+                                    <div className="text-xs text-muted-foreground mt-1 text-center">
+                                      {(kf.timestampMs / 1000).toFixed(1)}s
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {video.keyframes.count > 20 && (
+                              <p className="text-xs text-muted-foreground mt-2">
+                                显示前 20 帧，共 {video.keyframes.count} 帧（鼠标悬停可查看大图）
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* ASR转录预览 */}
+                        {video.asr.hasData && (
+                          <div>
+                            <h4 className="text-sm font-medium mb-2">
+                              ASR转录 ({video.asr.language || '自动检测'})
+                            </h4>
+                            <div className="p-3 bg-slate-50 rounded text-sm max-h-40 overflow-y-auto">
+                              <p className="whitespace-pre-wrap">{video.asr.textPreview}</p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(video.asr.fullText);
+                                alert("已复制到剪贴板");
+                              }}
+                              className="text-xs text-orange-600 hover:underline mt-2"
+                            >
+                              复制完整文本
+                            </button>
+                          </div>
+                        )}
+
+                        {/* 无数据提示 */}
+                        {!video.keyframes.hasData && !video.asr.hasData && (
+                          <div className="text-center py-6 text-muted-foreground text-sm">
+                            暂无关键帧和ASR数据
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 关键帧hover预览浮窗 */}
+      {hoverPreview.show && (
+        <div
+          className="fixed z-[9999] bg-white rounded-lg shadow-2xl border-2 border-orange-500 overflow-hidden"
+          style={{
+            left: `${hoverPreview.x + 15}px`,
+            top: `${hoverPreview.y + 15}px`,
+            maxWidth: '400px',
+            maxHeight: '400px',
+          }}
+        >
+          <img
+            src={hoverPreview.imageUrl}
+            alt="关键帧预览"
+            className="max-w-full max-h-[400px] object-contain"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

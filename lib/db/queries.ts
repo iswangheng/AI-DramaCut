@@ -1031,7 +1031,199 @@ export const audioTranscriptionQueries = {
 };
 
 // ============================================
-// 关键帧查询 (keyframes)
+// 杭州雷鸣音频转录查询 (hl_audio_transcriptions)
+// ============================================
+
+export const hlAudioTranscriptionQueries = {
+  /**
+   * 创建转录记录
+   */
+  async create(data: {
+    videoId: number;
+    text: string;
+    language: string;
+    duration: number;
+    segments: string;
+    model: string;
+    processingTimeMs?: number;
+  }) {
+    const [result] = await db.insert(schema.hlAudioTranscriptions).values(data).returning();
+    return result;
+  },
+
+  /**
+   * 根据 videoId 获取转录记录
+   */
+  async getByVideoId(videoId: number) {
+    const [result] = await db
+      .select()
+      .from(schema.hlAudioTranscriptions)
+      .where(eq(schema.hlAudioTranscriptions.videoId, videoId))
+      .limit(1);
+    return result || null;
+  },
+
+  /**
+   * 更新转录记录
+   */
+  async update(id: number, data: Partial<{ text: string; segments: string }>) {
+    const [result] = await db
+      .update(schema.hlAudioTranscriptions)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(schema.hlAudioTranscriptions.id, id))
+      .returning();
+    return result;
+  },
+
+  /**
+   * 删除转录记录
+   */
+  async delete(id: number) {
+    await db.delete(schema.hlAudioTranscriptions).where(eq(schema.hlAudioTranscriptions.id, id));
+  },
+
+  /**
+   * 根据 projectId 获取所有转录记录
+   */
+  async getByProjectId(projectId: number) {
+    const results = await db
+      .select({
+        transcription: schema.hlAudioTranscriptions,
+        video: schema.hlVideos,
+      })
+      .from(schema.hlAudioTranscriptions)
+      .innerJoin(schema.hlVideos, eq(schema.hlAudioTranscriptions.videoId, schema.hlVideos.id))
+      .where(eq(schema.hlVideos.projectId, projectId))
+      .orderBy(schema.hlAudioTranscriptions.createdAt);
+    return results;
+  },
+
+  /**
+   * 检查视频是否已有转录记录
+   */
+  async existsByVideoId(videoId: number): Promise<boolean> {
+    const [result] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(schema.hlAudioTranscriptions)
+      .where(eq(schema.hlAudioTranscriptions.videoId, videoId));
+    return (result?.count || 0) > 0;
+  },
+};
+
+// ============================================
+// 杭州雷鸣关键帧查询 (hl_keyframes)
+// ============================================
+
+export const hlKeyframeQueries = {
+  /**
+   * 创建关键帧记录
+   */
+  async create(data: {
+    videoId: number;
+    framePath: string;
+    timestampMs: number;
+    frameNumber: number;
+    fileSize?: number;
+  }) {
+    const [result] = await db
+      .insert(schema.hlKeyframes)
+      .values({ ...data, extractedAt: new Date() })
+      .returning();
+    return result;
+  },
+
+  /**
+   * 根据 videoId 获取所有关键帧
+   */
+  async getByVideoId(videoId: number) {
+    const results = await db
+      .select()
+      .from(schema.hlKeyframes)
+      .where(eq(schema.hlKeyframes.videoId, videoId))
+      .orderBy(schema.hlKeyframes.timestampMs);
+    return results;
+  },
+
+  /**
+   * 批量创建关键帧记录
+   */
+  async createBatch(frames: Array<{
+    videoId: number;
+    framePath: string;
+    timestampMs: number;
+    frameNumber: number;
+    fileSize?: number;
+  }>) {
+    const results = await db
+      .insert(schema.hlKeyframes)
+      .values(frames.map(f => ({ ...f, extractedAt: new Date() })))
+      .returning();
+    return results;
+  },
+
+  /**
+   * 删除指定视频的所有关键帧
+   */
+  async deleteByVideoId(videoId: number) {
+    await db.delete(schema.hlKeyframes).where(eq(schema.hlKeyframes.videoId, videoId));
+  },
+
+  /**
+   * 获取指定视频的关键帧数量
+   */
+  async getFrameCount(videoId: number) {
+    const [result] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(schema.hlKeyframes)
+      .where(eq(schema.hlKeyframes.videoId, videoId));
+    return result?.count || 0;
+  },
+
+  /**
+   * 根据时间范围获取关键帧
+   */
+  async getByTimeRange(videoId: number, startMs: number, endMs: number) {
+    const results = await db
+      .select()
+      .from(schema.hlKeyframes)
+      .where(
+        and(
+          eq(schema.hlKeyframes.videoId, videoId),
+          sql`${schema.hlKeyframes.timestampMs} >= ${startMs}`,
+          sql`${schema.hlKeyframes.timestampMs} <= ${endMs}`
+        )
+      )
+      .orderBy(schema.hlKeyframes.timestampMs);
+    return results;
+  },
+
+  /**
+   * 根据 projectId 获取所有关键帧
+   */
+  async getByProjectId(projectId: number) {
+    const results = await db
+      .select({
+        keyframe: schema.hlKeyframes,
+        video: schema.hlVideos,
+      })
+      .from(schema.hlKeyframes)
+      .innerJoin(schema.hlVideos, eq(schema.hlKeyframes.videoId, schema.hlVideos.id))
+      .where(eq(schema.hlVideos.projectId, projectId))
+      .orderBy(schema.hlKeyframes.timestampMs);
+    return results;
+  },
+
+  /**
+   * 检查视频是否已提取关键帧
+   */
+  async existsByVideoId(videoId: number): Promise<boolean> {
+    const count = await this.getFrameCount(videoId);
+    return count > 0;
+  },
+};
+
+// ============================================
+// 关键帧查询 (keyframes) - 通用系统
 // ============================================
 
 export const keyframeQueries = {
@@ -1191,6 +1383,8 @@ export const queries = {
   recapSegment: recapSegmentQueries,
   audioTranscription: audioTranscriptionQueries,
   keyframe: keyframeQueries,
+  hlAudioTranscription: hlAudioTranscriptionQueries,
+  hlKeyframe: hlKeyframeQueries,
   queueJob: queueJobQueries,
   stats: statsQueries,
 };

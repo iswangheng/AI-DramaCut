@@ -227,6 +227,8 @@ export interface PromptVariables {
   highlight_count?: number;
   hook_count?: number;
   total_analyses?: number;
+  existing_skill?: string | null;      // 现有技能文件内容
+  existing_version?: string | null;    // 现有技能文件版本
 
   // 聚类数据
   cluster1_name?: string;

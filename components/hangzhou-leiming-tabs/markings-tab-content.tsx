@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Trash2, FileText, Clock, Loader2, Tag } from "lucide-react";
+import { Trash2, FileText, Clock, Loader2, Tag, Download, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -31,14 +31,28 @@ interface MarkingsTabContentProps {
   onUpdate?: () => void;
 }
 
+interface ExcelFile {
+  filename: string;
+  uploadTime: number;
+  uploadTimeFormatted: string;
+  fileSize: number;
+  fileSizeFormatted: string;
+  downloadUrl: string;
+}
+
 export function MarkingsTabContent({ projectId, projectName, onUpdate }: MarkingsTabContentProps) {
   const [markings, setMarkings] = useState<HLMarking[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedMarking, setSelectedMarking] = useState<HLMarking | null>(null);
+  const [excelFiles, setExcelFiles] = useState<ExcelFile[]>([]);
+  const [loadingExcels, setLoadingExcels] = useState(false);
+  const [deleteExcelDialogOpen, setDeleteExcelDialogOpen] = useState(false);
+  const [selectedExcelFile, setSelectedExcelFile] = useState<ExcelFile | null>(null);
 
   useEffect(() => {
     loadMarkings();
+    loadExcelFiles();
   }, [projectId]);
 
   const loadMarkings = async () => {
@@ -53,6 +67,44 @@ export function MarkingsTabContent({ projectId, projectName, onUpdate }: Marking
       console.error("加载标记失败:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadExcelFiles = async () => {
+    try {
+      setLoadingExcels(true);
+      const res = await fetch(`/api/hangzhou-leiming/projects/${projectId}/excel-files`);
+      const result = await res.json();
+      if (result.success) {
+        setExcelFiles(result.data.files || []);
+      }
+    } catch (error) {
+      console.error("加载Excel文件失败:", error);
+    } finally {
+      setLoadingExcels(false);
+    }
+  };
+
+  const handleDeleteExcelFile = async () => {
+    if (!selectedExcelFile) return;
+
+    try {
+      const res = await fetch(selectedExcelFile.deleteUrl, {
+        method: "DELETE",
+      });
+
+      const result = await res.json();
+
+      if (result.success) {
+        setDeleteExcelDialogOpen(false);
+        setSelectedExcelFile(null);
+        await loadExcelFiles(); // 重新加载文件列表
+      } else {
+        alert(`删除失败：${result.message}`);
+      }
+    } catch (error) {
+      console.error("删除Excel文件失败:", error);
+      alert("删除Excel文件失败，请稍后重试");
     }
   };
 
@@ -84,6 +136,68 @@ export function MarkingsTabContent({ projectId, projectName, onUpdate }: Marking
           <p className="text-muted-foreground text-sm mt-1">{projectName} - 人工标记数据（用于AI训练）</p>
         </div>
       </div>
+
+      {/* 已上传的Excel文件 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileSpreadsheet className="w-5 h-5 text-green-600" />
+            已上传的Excel文件
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingExcels ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-orange-600" />
+            </div>
+          ) : excelFiles.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              暂无已上传的Excel文件
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {excelFiles.map((file) => (
+                <div
+                  key={file.filename}
+                  className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
+                >
+                  <div className="flex items-center gap-3 flex-1">
+                    <FileSpreadsheet className="w-5 h-5 text-green-600" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{file.originalName || file.filename}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {file.uploadTimeFormatted} · {file.fileSizeFormatted}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => window.open(file.downloadUrl, '_blank')}
+                      className="cursor-pointer"
+                    >
+                      <Download className="w-4 h-4 mr-1" />
+                      下载
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedExcelFile(file);
+                        setDeleteExcelDialogOpen(true);
+                      }}
+                      className="cursor-pointer hover:bg-red-50 hover:text-red-600"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {loading ? (
         <div className="flex justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-orange-600" /></div>
@@ -134,6 +248,17 @@ export function MarkingsTabContent({ projectId, projectName, onUpdate }: Marking
       )}
 
       <ConfirmDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen} title="确认删除标记" description={`确定要删除此标记吗？`} confirmText="确认删除" onConfirm={handleDelete} variant="destructive" />
+
+      {/* 删除Excel文件确认对话框 */}
+      <ConfirmDialog
+        open={deleteExcelDialogOpen}
+        onOpenChange={setDeleteExcelDialogOpen}
+        title="确认删除Excel文件"
+        description={`确定要删除文件「${selectedExcelFile?.originalName || selectedExcelFile?.filename}」吗？此操作无法撤销。`}
+        confirmText="确认删除"
+        onConfirm={handleDeleteExcelFile}
+        variant="destructive"
+      />
     </div>
   );
 }
