@@ -209,9 +209,9 @@ export default function VideosPage({
   const formatFileSize = (bytes: number) => {
     if (!bytes) return "-";
     if (bytes < 1024) return bytes + " B";
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " MB";
-    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + " GB";
-    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " TB";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
   };
 
   // 格式化时长
@@ -428,7 +428,7 @@ export default function VideosPage({
             {playingVideo && (
               <video
                 key={playingVideo.id}
-                src={`/api/videos/${playingVideo.id}/stream`}
+                src={`/api/hangzhou-leiming/videos/${playingVideo.id}/stream`}
                 controls
                 autoPlay
                 className="w-full rounded-lg"

@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
-import { hlMarkings } from "@/lib/db/schema";
+import { hlMarkings, hlVideos } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function GET(req: NextRequest) {
@@ -19,9 +19,28 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // 联合查询获取视频名称
     const markings = await db
-      .select()
+      .select({
+        id: hlMarkings.id,
+        projectId: hlMarkings.projectId,
+        videoId: hlMarkings.videoId,
+        timestamp: hlMarkings.timestamp,
+        seconds: hlMarkings.seconds,
+        type: hlMarkings.type,
+        subType: hlMarkings.subType,
+        description: hlMarkings.description,
+        score: hlMarkings.score,
+        reasoning: hlMarkings.reasoning,
+        aiEnhanced: hlMarkings.aiEnhanced,
+        emotion: hlMarkings.emotion,
+        characters: hlMarkings.characters,
+        createdAt: hlMarkings.createdAt,
+        updatedAt: hlMarkings.updatedAt,
+        videoName: hlVideos.filename,
+      })
       .from(hlMarkings)
+      .innerJoin(hlVideos, eq(hlMarkings.videoId, hlVideos.id))
       .where(eq(hlMarkings.projectId, parseInt(projectId)))
       .orderBy(hlMarkings.seconds);
 

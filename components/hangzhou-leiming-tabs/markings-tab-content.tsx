@@ -8,16 +8,21 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 
 interface HLMarking {
   id: number;
+  projectId: number;
   videoId: number;
   videoName: string;
-  startMs: number;
-  endMs: number | null;
+  timestamp: string;
+  seconds: number;
   type: "高光点" | "钩子点";
-  subType: string;
-  score: number;
+  subType: string | null;
+  description: string | null;
+  score: number | null;
+  reasoning: string | null;
+  aiEnhanced: boolean;
   emotion: string | null;
-  reasoning: string;
-  isConfirmed: boolean;
+  characters: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 interface MarkingsTabContentProps {
@@ -65,8 +70,7 @@ export function MarkingsTabContent({ projectId, projectName, onUpdate }: Marking
     }
   };
 
-  const formatTime = (ms: number) => {
-    const seconds = Math.floor(ms / 1000);
+  const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
     return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
@@ -77,7 +81,7 @@ export function MarkingsTabContent({ projectId, projectName, onUpdate }: Marking
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">标记管理</h2>
-          <p className="text-muted-foreground text-sm mt-1">{projectName} - AI智能标记结果</p>
+          <p className="text-muted-foreground text-sm mt-1">{projectName} - 人工标记数据（用于AI训练）</p>
         </div>
       </div>
 
@@ -94,7 +98,7 @@ export function MarkingsTabContent({ projectId, projectName, onUpdate }: Marking
                   <div className="flex-1">
                     <CardTitle className="text-base flex items-center gap-2">
                       <Tag className="w-4 h-4" />
-                      {marking.subType}
+                      {marking.subType || marking.description || "未命名"}
                     </CardTitle>
                     <p className="text-xs text-muted-foreground mt-1">{marking.videoName}</p>
                   </div>
@@ -106,15 +110,22 @@ export function MarkingsTabContent({ projectId, projectName, onUpdate }: Marking
               <CardContent className="space-y-2">
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="w-4 h-4 text-muted-foreground" />
-                  <span>{formatTime(marking.startMs)}</span>
-                  {marking.endMs && <span>- {formatTime(marking.endMs)}</span>}
+                  <span className="text-muted-foreground">时间点：</span>
+                  <span>{marking.timestamp}（{formatTime(marking.seconds)}）</span>
                 </div>
-                <p className="text-sm text-muted-foreground line-clamp-2">{marking.reasoning}</p>
-                <div className="flex items-center gap-2">
+                {marking.description && (
+                  <p className="text-sm text-muted-foreground line-clamp-2">{marking.description}</p>
+                )}
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className={`px-2 py-1 rounded-full text-xs ${marking.type === "高光点" ? "bg-orange-100 text-orange-800" : "bg-blue-100 text-blue-800"}`}>
                     {marking.type}
                   </span>
-                  <span className="text-xs text-muted-foreground">得分: {marking.score}</span>
+                  {marking.score && <span className="text-xs text-muted-foreground">得分: {marking.score}</span>}
+                  {marking.aiEnhanced && (
+                    <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
+                      AI增强
+                    </span>
+                  )}
                 </div>
               </CardContent>
             </Card>

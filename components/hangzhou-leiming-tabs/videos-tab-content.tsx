@@ -20,6 +20,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface HLVideo {
   id: number;
@@ -54,6 +61,8 @@ export function VideosTabContent({
   const [uploading, setUploading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<HLVideo | null>(null);
+  const [playVideoDialogOpen, setPlayVideoDialogOpen] = useState(false);
+  const [playingVideo, setPlayingVideo] = useState<HLVideo | null>(null);
 
   useEffect(() => {
     loadVideos();
@@ -149,11 +158,17 @@ export function VideosTabContent({
     }
   };
 
+  const handlePlayVideo = (video: HLVideo) => {
+    setPlayingVideo(video);
+    setPlayVideoDialogOpen(true);
+  };
+
   const formatFileSize = (bytes: number) => {
     if (!bytes) return "-";
     if (bytes < 1024) return bytes + " B";
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " MB";
-    return (bytes / (1024 * 1024)).toFixed(2) + " GB";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
   };
 
   const formatDuration = (ms: number) => {
@@ -232,7 +247,11 @@ export function VideosTabContent({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {videos.map((video) => (
-            <Card key={video.id} className="hover:shadow-lg transition-shadow">
+            <Card
+              key={video.id}
+              className="hover:shadow-lg transition-shadow cursor-pointer"
+              onClick={() => handlePlayVideo(video)}
+            >
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -247,7 +266,8 @@ export function VideosTabContent({
                     variant="ghost"
                     size="sm"
                     className="cursor-pointer hover:bg-red-50 hover:text-red-600"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setSelectedVideo(video);
                       setDeleteDialogOpen(true);
                     }}
@@ -324,6 +344,40 @@ export function VideosTabContent({
         onConfirm={handleDeleteVideo}
         variant="destructive"
       />
+
+      {/* 视频播放对话框 */}
+      <Dialog
+        open={playVideoDialogOpen}
+        onOpenChange={(open) => {
+          setPlayVideoDialogOpen(open);
+          if (!open) {
+            setPlayingVideo(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[800px]">
+          <DialogHeader>
+            <DialogTitle>
+              {playingVideo?.displayTitle || playingVideo?.filename}
+            </DialogTitle>
+            <DialogDescription>
+              {playingVideo?.episodeNumber} · {formatDuration(playingVideo?.durationMs || 0)} · {formatFileSize(playingVideo?.fileSize || 0)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4">
+            {playingVideo && (
+              <video
+                key={playingVideo.id}
+                src={`/api/hangzhou-leiming/videos/${playingVideo.id}/stream`}
+                controls
+                autoPlay
+                className="w-full rounded-lg"
+                style={{ maxHeight: '60vh' }}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
