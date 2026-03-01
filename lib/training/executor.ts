@@ -226,11 +226,7 @@ export class TrainingExecutor {
   private async analyzeMarking(result: MarkingAnalysisResult): Promise<any> {
     const { marking, keyframes, asr } = result;
 
-    // 1. 分析关键帧（Gemini Vision）
-    console.log(`  📸 分析关键帧 (${keyframes.framePaths.length}帧)...`);
-    const frameAnalysis = await this.analyzeKeyframesWithGemini(keyframes);
-
-    // 2. 提取标记点前后的ASR文本
+    // 1. 提取标记点前后的ASR文本（提前提取，用于降级方案）
     const centerMs = marking.seconds * 1000;
     const relevantSegments = asr.segments.filter(s => {
       const startMs = s.start * 1000;
@@ -239,6 +235,10 @@ export class TrainingExecutor {
     const relevantText = relevantSegments.map(s => s.text).join(' ');
 
     console.log(`  📝 相关文本: "${relevantText.substring(0, 50)}..."`);
+
+    // 2. 分析关键帧（Gemini Vision），传入 ASR 文本用于降级
+    console.log(`  📸 分析关键帧 (${keyframes.framePaths.length}帧)...`);
+    const frameAnalysis = await this.analyzeKeyframesWithGemini(keyframes, relevantText);
 
     // 3. 调用Gemini综合分析
     console.log(`  🤖 Gemini综合分析...`);
@@ -278,7 +278,8 @@ export class TrainingExecutor {
    * Gemini Vision分析关键帧（批量分析所有帧）
    */
   private async analyzeKeyframesWithGemini(
-    keyframes: { framePaths: string[]; timestamps: number[] }
+    keyframes: { framePaths: string[]; timestamps: number[] },
+    transcript?: string  // 可选：ASR转录文本
   ): Promise<string> {
     const { framePaths, timestamps } = keyframes;
 
@@ -404,9 +405,80 @@ export class TrainingExecutor {
         console.error(`  ❌ Gemini Vision 分析失败: ${errorMsg}`);
       }
 
-      // 降级方案：返回基础信息
-      return `关键帧分析${isTimeout ? '超时' : '失败'}: ${errorMsg}\n帧数: ${framePaths.length}\n时间范围: ${this.formatMs(timestamps[0])} - ${this.formatMs(timestamps[timestamps.length - 1])}`;
+      // 降级方案：基于 ASR 进行简化分析
+      console.log(`  ⚠️ 使用降级方案：基于 ASR 文本分析`);
+
+      const fallbackAnalysis = this.generateFallbackAnalysis(transcript, framePaths.length, timestamps);
+
+      return fallbackAnalysis;
     }
+  }
+
+  /**
+   * 生成基于 ASR 的降级分析
+   */
+  private generateFallbackAnalysis(transcript: string | undefined, frameCount: number, timestamps: number[]): string {
+    const timeRange = `${this.formatMs(timestamps[0])} - ${this.formatMs(timestamps[timestamps.length - 1])}`;
+
+    if (!transcript || transcript.trim() === '（无对白）' || transcript.trim() === '') {
+      // 没有ASR文本，返回最小信息
+      return `⚠️ [视觉分析超时] 无法提取画面特征
+
+分析状态:
+- 画面分析: 超时（>2分钟）
+- 音频转录: 无对白
+- 帧数: ${frameCount}帧
+- 时间范围: ${timeRange}
+
+建议:
+- 该标记点缺少视觉和文本特征
+- 技能生成时标记为"低置信度"
+- 建议人工复核`;
+    }
+
+    // 基于ASR文本进行简单分析
+    const textLength = transcript.length;
+    const hasExclamation = transcript.includes('！') || transcript.includes('!');
+    const hasQuestion = transcript.includes('？') || transcript.includes('?');
+    const hasNegativeWords = /不|没|别|无|非|未/.test(transcript);
+
+    // 推断情绪
+    let inferredEmotion = '平静';
+    let emotionIntensity = 5;
+
+    if (hasExclamation) {
+      inferredEmotion = '激动/愤怒';
+      emotionIntensity = 7;
+    }
+    if (hasNegativeWords) {
+      inferredEmotion = '否定/拒绝';
+      emotionIntensity = 6;
+    }
+    if (hasQuestion) {
+      inferredEmotion = '疑惑/质疑';
+      emotionIntensity = 6;
+    }
+
+    return `⚠️ [视觉分析超时] 基于音频转录的简化分析
+
+分析状态:
+- 画面分析: 超时（>2分钟）
+- 音频转录: 已完成（${textLength}字）
+- 帧数: ${frameCount}帧
+- 时间范围: ${timeRange}
+
+基于台词推断的特征:
+- 台词内容: "${transcript.substring(0, 100)}${textLength > 100 ? '...' : ''}"
+- 推断情绪: ${inferredEmotion} (强度: ${emotionIntensity}/10)
+- 台词特征: ${hasExclamation ? '感叹句结尾' : ''}${hasQuestion ? '疑问句' : ''}${hasNegativeWords ? '包含否定词' : ''}
+
+视觉特征（缺失）:
+- ⚠️ 画面分析超时，无法提取表情、动作、镜头信息
+
+建议:
+- 该标记点主要依赖台词特征
+- 技能生成时降低视觉权重，提高台词权重
+- 人工复核时重点关注台词内容`;
   }
 
   /**
