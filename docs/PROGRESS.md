@@ -32,6 +32,89 @@
 
 ## 📅 更新日志
 
+### 2026-03-01 - 杭州雷鸣模块UI修复和优化
+
+#### ✅ 完成事项
+
+- ✅ **视频管理 - 文件大小显示修复**
+  - **问题**：formatFileSize 函数单位错误
+    - 除以 1024 显示 "MB"（应该是 **KB**）
+    - 除以 1024×1024 显示 "GB"（应该是 **MB**）
+    - 除以 1024×1024×1024 显示 "TB"（应该是 **GB**）
+  - **修复**：更正为正确的单位（KB → MB → GB → TB）
+  - **影响文件**：
+    - `app/hangzhou-leiming/[id]/videos/page.tsx`
+    - `components/hangzhou-leiming-tabs/videos-tab-content.tsx`
+
+- ✅ **视频播放功能完整实现**
+  - **问题**：视频卡片不可点击，无法播放视频
+  - **功能添加**：
+    - 视频卡片点击事件（`onClick` + `cursor-pointer`）
+    - 视频播放弹窗 Dialog
+    - HTML5 标准播放器（播放/暂停控制）
+    - 点击弹窗外部关闭
+  - **状态管理**：`playVideoDialogOpen`, `playingVideo`
+  - **影响文件**：同上
+
+- ✅ **杭州雷鸣视频流API创建**
+  - **问题**：杭州雷鸣使用 `hlVideos` 表，但 `/api/videos/[id]/stream` 查询的是通用 `videos` 表
+  - **结果**：第2集及后续视频都返回404错误
+  - **解决方案**：
+    - 创建专门的API端点：`/api/hangzhou-leiming/videos/[id]/stream`
+    - 直接查询 `hlVideos` 表（杭州雷鸣专用）
+    - 支持流式传输和 Range 请求（拖动播放）
+  - **新增文件**：`app/api/hangzhou-leiming/videos/[id]/stream/route.ts`
+
+- ✅ **标记管理Tab显示修复**
+  - **问题**：前端接口定义与数据库表不匹配
+    - 显示不存在的字段（`videoName`, `startMs`, `endMs`, `isConfirmed`）
+    - 时间显示错误（用毫秒而不是秒）
+    - 描述误导（显示"AI智能标记结果"但实际是人工标记）
+  - **修复**：
+    - 更新接口定义匹配 `hlMarkings` 表结构
+    - API 返回时 JOIN `hlVideos` 表获取 `videoName`
+    - 修改时间显示使用 `timestamp` 和 `seconds`
+    - 更新描述为"人工标记数据（用于AI训练）"
+    - 添加"AI增强"标签显示（`aiEnhanced` 字段）
+  - **影响文件**：
+    - `app/api/hangzhou-leiming/markings/route.ts` - 添加 videoName
+    - `components/hangzhou-leiming-tabs/markings-tab-content.tsx` - 接口和显示
+
+#### 🎯 技术亮点
+
+- **API分层设计**：杭州雷鸣模块使用独立的API端点，避免与主项目冲突
+- **类型安全**：接口定义严格匹配数据库表结构
+- **用户体验优化**：
+  - 文件大小正确显示（避免混淆）
+  - 视频可直接预览播放
+  - 清晰的标记数据来源说明
+
+#### 🐛 修复的Bug列表
+
+1. **文件大小显示错误** → formatFileSize 单位修正
+2. **视频无法播放** → 添加播放弹窗功能
+3. **第2集及后续视频404** → 创建专用API端点
+4. **标记数据字段不匹配** → 接口和API对齐
+5. **描述文本误导** → 更新为准确说明
+
+#### 📦 变更文件
+
+**新增文件**：
+- app/api/hangzhou-leiming/videos/[id]/stream/route.ts (~100 行)
+
+**修改文件**：
+- app/api/hangzhou-leiming/markings/route.ts (添加 videoName)
+- app/hangzhou-leiming/[id]/videos/page.tsx (文件大小 + 播放功能)
+- components/hangzhou-leiming-tabs/videos-tab-content.tsx (文件大小 + 播放功能)
+- components/hangzhou-leiming-tabs/markings-tab-content.tsx (接口修复 + 显示优化)
+
+#### 📊 完成状态
+- ✅ 视频管理优化：100% 完成
+- ✅ 标记管理修复：100% 完成
+- ✅ 用户体验提升：100% 完成
+
+---
+
 ### 2026-03-01 - 训练系统和视频管理优化完成
 
 #### ✅ 完成事项
