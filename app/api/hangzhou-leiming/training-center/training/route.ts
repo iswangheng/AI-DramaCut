@@ -169,6 +169,19 @@ async function executeTraining(
 
     console.log(`[训练中心] 训练完成，ID: ${trainingId}`);
 
+    // 更新训练历史记录为完成状态
+    await db
+      .update(hlTrainingHistory)
+      .set({
+        status: "completed",
+        progress: 100,
+        currentStep: "训练完成",
+        completedAt: new Date(),
+      })
+      .where(eq(hlTrainingHistory.id, trainingId));
+
+    console.log(`[训练中心] 训练状态已更新为完成，ID: ${trainingId}`);
+
   } catch (error) {
     console.error(`[训练中心] 训练失败:`, error);
 
