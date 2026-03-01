@@ -70,13 +70,30 @@ export default function TrainingHistoryPage() {
       const res = await fetch(
         "/api/hangzhou-leiming/training-center/history?limit=50"
       );
-      const result = await res.json();
+
+      // 检查HTTP状态
+      if (!res.ok) {
+        console.error(`API错误: ${res.status} ${res.statusText}`);
+        setHistory([]);
+        return;
+      }
+
+      // 解析JSON（带容错）
+      let result;
+      try {
+        result = await res.json();
+      } catch (jsonError) {
+        console.error("JSON解析失败:", jsonError);
+        setHistory([]);
+        return;
+      }
 
       if (result.success) {
         setHistory(result.data || []);
       }
     } catch (error) {
       console.error("加载训练历史失败:", error);
+      setHistory([]);
     } finally {
       setLoading(false);
     }

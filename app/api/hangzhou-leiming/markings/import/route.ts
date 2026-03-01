@@ -10,6 +10,8 @@ import { db } from "@/lib/db/client";
 import { hlMarkings, hlVideos } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import * as XLSX from "xlsx";
+import { writeFile, mkdir } from "fs/promises";
+import { join } from "path";
 
 // POST - 导入Excel标记数据
 export async function POST(req: NextRequest) {
@@ -35,13 +37,27 @@ export async function POST(req: NextRequest) {
 
     const projectId = parseInt(projectIdStr);
 
-    // 读取Excel文件
+    // ✅ 保存原始Excel文件到磁盘
+    const projectDir = join(process.cwd(), "data", "hangzhou-leiming", String(projectId));
+    const excelDir = join(projectDir, "excel");
+    await mkdir(excelDir, { recursive: true });
+
+    const timestamp = Date.now();
+    const excelFilename = `markings_${timestamp}.xlsx`;
+    const excelPath = join(excelDir, excelFilename);
+
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
+
+    // 保存Excel文件
+    await writeFile(excelPath, buffer);
+    console.log(`✅ 原始Excel文件已保存: ${excelPath}`);
+
+    // 读取Excel数据
     const workbook = XLSX.read(buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
-    const data = XLSX.utils.sheet_to_json(worksheet);
+    const data = XLSX.utils.sheet_to_json(worksheet, { raw: false }); // ✅ 强制读取为字符串，保留原始格式
 
     console.log(`Excel数据解析成功，共 ${data.length} 行`);
 
@@ -139,11 +155,16 @@ export async function POST(req: NextRequest) {
 
 /**
  * 解析时间戳为秒数
+ *
+ * ✅ 正确格式（杭州雷鸣项目）：MM:SS:ms（分钟:秒:毫秒）
+ * - "0:05:00" -> 0分5秒 = 5秒
+ * - "1:34:00" -> 1分34秒 = 94秒
+ * - "0:25:00" -> 0分25秒 = 25秒
+ *
  * 支持格式：
- * - "00:35" -> 35秒
- * - "01:20" -> 80秒
- * - "00:01:20" -> 80秒
- * - 0.025694444 -> 数字（天数，Excel 格式）-> 转换为秒
+ * - "00:35" -> 35秒（MM:SS）
+ * - "01:20" -> 80秒（MM:SS）
+ * - "00:01:20" -> 80秒（MM:SS:ms，忽略毫秒）
  */
 function parseTimestamp(timestamp: string | number): number {
   // 如果是数字格式（Excel 小数格式）
@@ -161,9 +182,11 @@ function parseTimestamp(timestamp: string | number): number {
       const [minutes, seconds] = parts;
       return minutes * 60 + seconds;
     } else if (parts.length === 3) {
-      // HH:MM:SS
-      const [hours, minutes, seconds] = parts;
-      return hours * 3600 + minutes * 60 + seconds;
+      // ✅ MM:SS:ms 格式（杭州雷鸣项目专用）
+      // 例如："0:05:00" → 0分5秒0毫秒 = 5秒
+      // "1:34:00" → 1分34秒0毫秒 = 94秒
+      const [minutes, seconds, milliseconds] = parts;
+      return minutes * 60 + seconds; // 忽略毫秒
     }
   }
 

@@ -75,6 +75,12 @@ export async function POST(req: NextRequest) {
     const height = 1080;
     const fps = 30;
 
+    // 🔧 自动从文件名提取集数（如果用户未指定）
+    let finalEpisodeNumber = episodeNumber;
+    if (!finalEpisodeNumber || finalEpisodeNumber.trim() === '') {
+      finalEpisodeNumber = extractEpisodeNumber(file.name);
+    }
+
     // 插入数据库
     const [newVideo] = await db
       .insert(hlVideos)
@@ -83,7 +89,7 @@ export async function POST(req: NextRequest) {
         filename: file.name,
         filePath,
         fileSize,
-        episodeNumber: episodeNumber || `未命名`,
+        episodeNumber: finalEpisodeNumber,
         displayTitle: displayTitle || file.name,
         sortOrder: 0,
         durationMs,
@@ -143,4 +149,53 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * 从文件名提取集数
+ *
+ * 支持的文件名格式：
+ * - 1.mp4 → "第1集"
+ * - 01.mp4 → "第1集"
+ * - 第2集.mp4 → "第2集"
+ * - EP3.mp4 → "第3集"
+ * - Episode 04.mp4 → "第4集"
+ *
+ * @param filename - 文件名（如 "1.mp4"）
+ * @returns 集数（如 "第1集"），无法识别返回 "未命名"
+ */
+function extractEpisodeNumber(filename: string): string {
+  // 移除扩展名
+  const nameWithoutExt = filename.replace(/\.[^.]+$/, '');
+
+  // 模式1：纯数字（1, 01, 001）
+  const pureNumberMatch = nameWithoutExt.match(/^(\d+)$/);
+  if (pureNumberMatch) {
+    const num = parseInt(pureNumberMatch[1], 10);
+    return `第${num}集`;
+  }
+
+  // 模式2：已包含"第X集"格式
+  if (nameWithoutExt.includes('第') && nameWithoutExt.includes('集')) {
+    const match = nameWithoutExt.match(/第(\d+)集/);
+    if (match) {
+      return `第${match[1]}集`;
+    }
+  }
+
+  // 模式3：EP前缀（EP1, EP01, Episode 1）
+  const epMatch = nameWithoutExt.match(/^EP(\d+)$/i);
+  if (epMatch) {
+    const num = parseInt(epMatch[1], 10);
+    return `第${num}集`;
+  }
+
+  const episodeMatch = nameWithoutExt.match(/Episode\s+(\d+)/i);
+  if (episodeMatch) {
+    const num = parseInt(episodeMatch[1], 10);
+    return `第${num}集`;
+  }
+
+  // 无法识别，返回默认值
+  return '未命名';
 }

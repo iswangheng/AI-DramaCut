@@ -25,11 +25,11 @@ export async function GET(req: NextRequest) {
       .orderBy(desc(hlTrainingHistory.createdAt))
       .limit(limit);
 
-    // 解析 JSON 字段
+    // 解析 JSON 字段（带容错处理）
     const parsedHistory = history.map((record: any) => ({
       ...record,
-      projectIds: JSON.parse(record.projectIds),
-      projectNames: JSON.parse(record.projectNames),
+      projectIds: safeParseJSON(record.projectIds, []),
+      projectNames: safeParseJSON(record.projectNames, []),
     }));
 
     return NextResponse.json({
@@ -45,5 +45,21 @@ export async function GET(req: NextRequest) {
       },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * 安全解析JSON（带容错处理）
+ */
+function safeParseJSON(jsonString: string | null, defaultValue: any = null): any {
+  if (!jsonString || jsonString.trim() === '') {
+    return defaultValue;
+  }
+
+  try {
+    return JSON.parse(jsonString);
+  } catch (error) {
+    console.warn(`JSON解析失败: ${jsonString}`, error);
+    return defaultValue;
   }
 }

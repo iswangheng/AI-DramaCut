@@ -78,6 +78,8 @@ export default function VideosPage({
   const [uploading, setUploading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<HLVideo | null>(null);
+  const [playVideoDialogOpen, setPlayVideoDialogOpen] = useState(false);
+  const [playingVideo, setPlayingVideo] = useState<HLVideo | null>(null);
 
   // 加载 projectId
   useEffect(() => {
@@ -197,12 +199,19 @@ export default function VideosPage({
     }
   };
 
+  // 播放视频
+  const handlePlayVideo = (video: HLVideo) => {
+    setPlayingVideo(video);
+    setPlayVideoDialogOpen(true);
+  };
+
   // 格式化文件大小
   const formatFileSize = (bytes: number) => {
     if (!bytes) return "-";
     if (bytes < 1024) return bytes + " B";
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " MB";
-    return (bytes / (1024 * 1024)).toFixed(2) + " GB";
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + " GB";
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " TB";
   };
 
   // 格式化时长
@@ -296,7 +305,11 @@ export default function VideosPage({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {videos.map((video) => (
-              <Card key={video.id} className="hover:shadow-lg transition-shadow">
+              <Card
+                key={video.id}
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => handlePlayVideo(video)}
+              >
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -311,7 +324,8 @@ export default function VideosPage({
                       variant="ghost"
                       size="sm"
                       className="cursor-pointer hover:bg-red-50 hover:text-red-600"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setSelectedVideo(video);
                         setDeleteDialogOpen(true);
                       }}
@@ -390,6 +404,40 @@ export default function VideosPage({
         onConfirm={handleDeleteVideo}
         variant="destructive"
       />
+
+      {/* 视频播放对话框 */}
+      <Dialog
+        open={playVideoDialogOpen}
+        onOpenChange={(open) => {
+          setPlayVideoDialogOpen(open);
+          if (!open) {
+            setPlayingVideo(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[800px]">
+          <DialogHeader>
+            <DialogTitle>
+              {playingVideo?.displayTitle || playingVideo?.filename}
+            </DialogTitle>
+            <DialogDescription>
+              {playingVideo?.episodeNumber} · {formatDuration(playingVideo?.durationMs || 0)} · {formatFileSize(playingVideo?.fileSize || 0)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4">
+            {playingVideo && (
+              <video
+                key={playingVideo.id}
+                src={`/api/videos/${playingVideo.id}/stream`}
+                controls
+                autoPlay
+                className="w-full rounded-lg"
+                style={{ maxHeight: '60vh' }}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </HangzhouLeimingLayout>
   );
 }

@@ -97,13 +97,14 @@ async function hasGPUSupport(): Promise<boolean> {
  * 根据硬件自动选择最优配置
  */
 async function getOptimalConfig(): Promise<{ model: string; device: 'cpu' | 'cuda' }> {
-  // 🔧 临时强制使用 CPU 模式（Mac 兼容性修复）
-  // TODO: 等 GPU 检测稳定后移除此强制设置
-  console.log('ℹ️  当前使用 CPU 模式（Mac 兼容）');
+  // ========================================
+  // ✅ 训练场景使用 base 模型（准确度优先）
+  // ========================================
+  console.log('ℹ️  训练模式：使用 base 模型（准确度优先）');
 
   return {
-    model: 'tiny',    // CPU 使用 tiny 模型
-    device: 'cpu',
+    model: 'base',    // ✅ 使用 base 模型（74MB，准确度更高）
+    device: 'cpu',    // Mac 使用 CPU
   };
 
   /* GPU 自动检测代码（暂时禁用）
@@ -159,18 +160,22 @@ export async function transcribeAudio(
     // 构建 Whisper 命令
     const outputPath = audioPath.replace(/\.[^.]+$/, `.${outputFormat}`);
 
+    // 使用 Python 模块方式调用 Whisper（更可靠）
+    const whisperPath = '/Users/wangheng/Library/Python/3.9/bin/whisper';
     const command = [
+      'python3',
+      '-m',
       'whisper',
       audioPath,
-      `--model ${model}`,
-      `--language ${language}`,
-      `--task ${task}`,
-      `--output_format ${outputFormat}`,
-      `--device ${device}`,  // ✅ 添加设备参数
+      `--model`, model,
+      `--language`, language,
+      `--task`, task,
+      `--output_format`, outputFormat,
+      `--device`, device,
       '--output_dir', join(audioPath, '..'),
     ].join(' ');
 
-    console.log(`  🔧 命令: whisper "${audioPath}" --model ${model} --device ${device} --language ${language}`);
+    console.log(`  🔧 命令: python3 -m whisper "${audioPath}" --model ${model} --device ${device} --language ${language}`);
 
     // 执行转录
     const { stdout, stderr } = await exec(command, {
@@ -232,4 +237,119 @@ export async function transcribeToText(
 ): Promise<string> {
   const result = await transcribeAudio(audioPath, { language });
   return result.text;
+}
+
+/**
+ * 转录音频片段（用于训练中心）
+ *
+ * @param videoPath 视频文件路径
+ * @param startMs 开始时间（毫秒）
+ * @param endMs 结束时间（毫秒）
+ * @param options 转录选项
+ * @returns 转录结果
+ *
+ * @example
+ * const result = await transcribeAudioSegment(
+ *   'video.mp4',
+ *   25000,  // 00:25
+ *   35000,  // 00:35
+ *   { model: 'tiny', language: 'zh' }
+ * );
+ */
+export async function transcribeAudioSegment(
+  videoPath: string,
+  startMs: number,
+  endMs: number,
+  options: TranscribeOptions = {}
+): Promise<TranscriptionResult> {
+  const startTime = Date.now();
+
+  // 使用 ffmpeg 提取音频片段
+  const segmentAudioPath = await extractAudioSegment(videoPath, startMs, endMs);
+
+  console.log(`🎙️ [音频片段转录] 提取音频片段: ${(startMs/1000).toFixed(1)}s - ${(endMs/1000).toFixed(1)}s`);
+
+  // 调用 whisper 转录
+  const result = await transcribeAudio(segmentAudioPath, options);
+
+  // 删除临时音频文件
+  const fs = await import('fs/promises');
+  try {
+    await fs.unlink(segmentAudioPath);
+    console.log(`🗑️ 已删除临时音频文件: ${segmentAudioPath}`);
+  } catch (error) {
+    console.warn(`⚠️ 删除临时文件失败: ${error}`);
+  }
+
+  const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`✅ 片段转录完成！耗时: ${elapsedTime}秒, 文本长度: ${result.text.length}字`);
+
+  return result;
+}
+
+/**
+ * 提取音频片段（内部函数）
+ *
+ * @param videoPath 视频文件路径
+ * @param startMs 开始时间（毫秒）
+ * @param endMs 结束时间（毫秒）
+ * @returns 音频片段文件路径
+ */
+async function extractAudioSegment(
+  videoPath: string,
+  startMs: number,
+  endMs: number
+): Promise<string> {
+  const { mkdir } = await import('fs/promises');
+  const { join } = await import('path');
+
+  // 创建临时目录
+  const tempDir = join(process.cwd(), 'data', 'temp', 'audio');
+  await mkdir(tempDir, { recursive: true });
+
+  // 生成临时文件名
+  const timestamp = Date.now();
+  const segmentAudioPath = join(tempDir, `segment_${timestamp}.wav`);
+
+  // 计算 ffmpeg 时间参数
+  const startTime = startMs / 1000;
+  const duration = (endMs - startMs) / 1000;
+
+  // 使用 ffmpeg 提取音频片段
+  const ffmpegCommand = [
+    'ffmpeg',
+    '-ss', startTime.toString(),      // 跳转到开始时间
+    '-i', videoPath,                  // 输入文件
+    '-t', duration.toString(),        // 持续时间
+    '-vn',                            // 不处理视频
+    '-acodec', 'pcm_s16le',           // 音频编码: 16-bit PCM
+    '-ar', '16000',                   // 采样率: 16kHz（Whisper 推荐）
+    '-ac', '1',                       // 声道数: 单声道
+    '-y',                             // 覆盖已存在文件
+    segmentAudioPath
+  ];
+
+  console.log(`🔧 [FFmpeg] 提取音频片段: ${startTime}s - ${(startTime + duration).toFixed(1)}s`);
+
+  await new Promise<void>((resolve, reject) => {
+    const { spawn } = require('child_process');
+    const ffmpeg = spawn('ffmpeg', ffmpegCommand);
+    let stderr = '';
+
+    ffmpeg.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    ffmpeg.on('close', (code: number) => {
+      if (code === 0) {
+        console.log(`✅ [FFmpeg] 音频片段提取完成`);
+        resolve();
+      } else {
+        console.error(`❌ [FFmpeg] 错误: ${stderr}`);
+        reject(new Error(`FFmpeg 提取音频失败: ${stderr}`));
+      }
+    });
+  });
+
+  return segmentAudioPath;
 }

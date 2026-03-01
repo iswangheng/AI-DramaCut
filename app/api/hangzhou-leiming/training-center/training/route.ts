@@ -116,8 +116,84 @@ export async function POST(req: NextRequest) {
 
 /**
  * 执行训练任务（异步函数）
+ * 使用新的TrainingExecutor实现完整的训练流程
  */
 async function executeTraining(
+  trainingId: number,
+  projects: any[]
+): Promise<void> {
+  try {
+    console.log(`[训练中心] 开始执行训练，ID: ${trainingId}`);
+
+    // 读取所有项目的标记数据
+    const allMarkings: any[] = [];
+
+    for (const project of projects) {
+      const markings = await db
+        .select()
+        .from(hlMarkings)
+        .where(eq(hlMarkings.projectId, project.id));
+
+      allMarkings.push(...markings);
+      console.log(`[训练中心] 项目「${project.name}」: ${markings.length} 个标记`);
+    }
+
+    console.log(`[训练中心] 共读取 ${allMarkings.length} 个标记`);
+
+    // ========================================
+    // ✅ 使用新的TrainingExecutor
+    // ========================================
+    const { TrainingExecutor } = await import('@/lib/training/executor');
+
+    const executor = new TrainingExecutor({
+      trainingId,
+      projectId: projects[0].id,  // 主项目ID
+      markings: allMarkings,
+      concurrency: 5,  // 并发数5
+      onProgress: async (progress: number, step: string) => {
+        // 更新训练进度
+        await db
+          .update(hlTrainingHistory)
+          .set({
+            progress,
+            currentStep: step,
+          })
+          .where(eq(hlTrainingHistory.id, trainingId));
+
+        console.log(`[训练中心] 进度: ${progress}% - ${step}`);
+      },
+    });
+
+    // 执行训练
+    await executor.execute();
+
+    console.log(`[训练中心] 训练完成，ID: ${trainingId}`);
+
+  } catch (error) {
+    console.error(`[训练中心] 训练失败:`, error);
+
+    // 更新训练历史记录为失败状态
+    await db
+      .update(hlTrainingHistory)
+      .set({
+        status: "failed",
+        currentStep: "训练失败",
+        errorMessage: error instanceof Error ? error.message : "未知错误",
+      })
+      .where(eq(hlTrainingHistory.id, trainingId));
+
+    throw error;
+  }
+}
+
+// ============================================
+// 以下为旧的实现（已废弃，保留用于参考）
+// ============================================
+
+/**
+ * @deprecated 已废弃，请使用TrainingExecutor
+ */
+async function executeTrainingLegacy(
   trainingId: number,
   projects: any[]
 ): Promise<void> {

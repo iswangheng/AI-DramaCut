@@ -26,6 +26,7 @@
     "test:learning": "tsx scripts/test-learning.ts",
     "test:recommendation": "tsx scripts/test-recommendation-engine.ts",
     "test:export": "tsx scripts/test-export.ts",
+    "check:deps": "bash scripts/check-deps.sh",
     "commit": "./scripts/commit-work-interactive.sh",
     "commit:quick": "./scripts/commit-work.sh"
   },

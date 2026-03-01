@@ -44,6 +44,7 @@
 | `DEPLOYMENT.md` | 部署指南、运维手册 | 按需 | DevOps Agent |
 | `ROADMAP.md` | **项目路线图、待办事项** | 每周 | Project Manager Agent |
 | `COLLABORATION.md` | **Agent 协作指南、分工** | 按需 | 所有 Agent |
+| `docs/DEPENDENCIES.md` | **依赖和环境配置指南** | 按需 | DevOps Agent |
 
 ### 2️⃣ 进度文档（docs/）
 
@@ -393,6 +394,23 @@ git log -1 --stat
 ## 🚀 开发前检查清单
 
 **每次启动开发服务器前，务必执行以下检查：**
+
+### 0. 依赖和环境检查（**一键验证**）
+
+**快速验证所有依赖是否正确安装：**
+```bash
+npm run check:deps
+```
+
+这个脚本会检查：
+- ✅ Node.js 和 npm 版本
+- ✅ Python 3 和 Whisper 模块
+- ✅ FFmpeg 和 Redis
+- ✅ Node.js 依赖完整性
+- ✅ 环境变量配置（.env.local）
+- ✅ 构建状态（.next 目录）
+
+**详细配置指南**: 查看 [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md)
 
 ### 1. 端口占用检查
 ```bash
