@@ -455,17 +455,98 @@ export class RecommendationEngine {
   /**
    * 计算历史验证得分
    *
-   * TODO: 实现与历史数据的相似度对比
-   * - 当前返回默认值 6-8
-   * - 未来可以对比技能文件中的历史高转化素材
-   * - 使用向量相似度或规则匹配
+   * 实现与历史数据的相似度对比：
+   * - 对比技能文件中的历史高转化素材
+   * - 基于类型匹配度和时长相似度计算得分
    */
   private static async calculateHistoryScore(
     combination: ClipCombination
   ): Promise<number> {
-    // 初期返回默认值
-    // TODO: 实现真正的历史验证逻辑
-    return 6 + Math.random() * 2; // 6-8
+    try {
+      // 1. 获取最新的技能文件
+      const { db } = await import('../db/client');
+      const { hlSkills } = await import('../db/schema');
+      const { desc } = await import('drizzle-orm');
+
+      const [latestSkill] = await db
+        .select()
+        .from(hlSkills)
+        .orderBy(desc(hlSkills.createdAt))
+        .limit(1);
+
+      if (!latestSkill || !latestSkill.highlightTypes || !latestSkill.hookTypes) {
+        // 没有历史数据，返回默认值
+        return 6 + Math.random() * 2; // 6-8
+      }
+
+      // 2. 解析技能文件中的类型定义
+      const highlightTypes = JSON.parse(latestSkill.highlightTypes);
+      const hookTypes = JSON.parse(latestSkill.hookTypes);
+
+      // 3. 计算类型匹配度
+      const highlightSubTypes = combination.highlights.map(h => h.subType);
+      const hookSubTypes = combination.hooks.map(h => h.subType);
+
+      let typeMatchScore = 0;
+      let matchedCount = 0;
+
+      // 检查高光点类型匹配
+      for (const subType of highlightSubTypes) {
+        const matched = highlightTypes.find((t: any) => t.name === subType);
+        if (matched) {
+          typeMatchScore += 2;
+          matchedCount++;
+        }
+      }
+
+      // 检查钩子点类型匹配
+      for (const subType of hookSubTypes) {
+        const matched = hookTypes.find((t: any) => t.name === subType);
+        if (matched) {
+          typeMatchScore += 2;
+          matchedCount++;
+        }
+      }
+
+      // 4. 计算时长合理性（基于技能文件中的剪辑规则）
+      const durationMin = combination.totalDurationMs / 60000;
+      let durationScore = 5;
+
+      if (latestSkill.editingRules) {
+        const editingRules = JSON.parse(latestSkill.editingRules);
+        // 查找匹配的剪辑规则
+        const matchedRule = editingRules.find((rule: any) => {
+          // 简单匹配：场景类型
+          const highlightDesc = highlightSubTypes.join(' + ');
+          return highlightDesc.includes(rule.scenario);
+        });
+
+        if (matchedRule) {
+          // 解析规则中的时长建议（如"60-90秒"）
+          const durationMatch = matchedRule.duration.match(/(\d+)-(\d+)/);
+          if (durationMatch) {
+            const minMin = parseInt(durationMatch[1]) / 60;
+            const maxMin = parseInt(durationMatch[2]) / 60;
+            if (durationMin >= minMin && durationMin <= maxMin) {
+              durationScore = 8;
+            } else if (durationMin >= minMin * 0.8 && durationMin <= maxMin * 1.2) {
+              durationScore = 6;
+            }
+          }
+        }
+      }
+
+      // 5. 综合计算历史得分
+      const totalScore = typeMatchScore + durationScore;
+      const normalizedScore = Math.min(10, Math.max(1, totalScore));
+
+      console.log(`  📊 [历史验证] 类型匹配: ${matchedCount}/${highlightSubTypes.length + hookSubTypes.length}, 时长得分: ${durationScore.toFixed(1)}, 总分: ${normalizedScore.toFixed(1)}`);
+
+      return normalizedScore;
+    } catch (error) {
+      console.warn(`⚠️  [历史验证] 计算失败: ${error}，使用默认值`);
+      return 6 + Math.random() * 2; // 降级到默认值
+    }
   }
 
   /**

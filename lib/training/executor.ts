@@ -274,14 +274,123 @@ export class TrainingExecutor {
   }
 
   /**
-   * Gemini Vision分析关键帧
+   * Gemini Vision分析关键帧（批量分析所有帧）
    */
   private async analyzeKeyframesWithGemini(
     keyframes: { framePaths: string[]; timestamps: number[] }
   ): Promise<string> {
-    // TODO: 实现Gemini Vision分析
-    // 由于需要批量处理关键帧，这里先返回简化版本
-    return `关键帧分析: ${keyframes.framePaths.length}帧\n时间范围: ${this.formatMs(keyframes.timestamps[0])} - ${this.formatMs(keyframes.timestamps[keyframes.timestamps.length - 1])}`;
+    const { framePaths, timestamps } = keyframes;
+
+    console.log(`  📸 Gemini Vision 分析 ${framePaths.length} 帧关键帧...`);
+
+    if (framePaths.length === 0) {
+      return '无关键帧';
+    }
+
+    try {
+      // 1. 批量读取图片并转换为 base64
+      const imagesData = await Promise.all(
+        framePaths.map(async (framePath, index) => {
+          const fs = await import('fs/promises');
+          const base64 = await fs.readFile(framePath, 'base64');
+
+          return {
+            base64,
+            timestamp: timestamps[index],
+            index,
+          };
+        })
+      );
+
+      // 2. 构建分析提示词
+      const prompt = `请分析这 ${imagesData.length} 帧连续的视频关键帧，按顺序描述每一帧的内容。
+
+**分析要求**：
+1. 按时间顺序逐帧描述（帧1、帧2、帧3...）
+2. 每帧包含以下信息：
+   - 画面内容（人物、场景、动作）
+   - 表情和情绪
+   - 镜头类型（特写、中景、远景等）
+   - 光线和色调
+
+**返回格式**：
+帧1 [时间]: 画面描述（人物、动作、表情）
+帧2 [时间]: 画面描述
+...
+
+**注意**：
+- 这是短视频片段，帧与帧之间可能有情节连续性
+- 关注情绪变化和视觉冲突点
+- 识别可能吸引观众的视觉元素`;
+
+      // 3. 构建 Gemini 请求（多模态）
+      const parts: any[] = imagesData.map((img, index) => ({
+        inline_data: {
+          mime_type: 'image/jpeg',
+          data: img.base64,
+        },
+      }));
+
+      // 添加文本提示
+      parts.push({
+        text: prompt,
+      });
+
+      const requestBody = {
+        contents: [
+          {
+            role: 'user',
+            parts,
+          },
+        ],
+        generationConfig: {
+          responseModalities: ['TEXT'],
+          temperature: 0.7,
+          maxOutputTokens: 4096,
+        },
+      };
+
+      // 4. 调用 Gemini API
+      const geminiConfig = await import('../config').then(m => m.geminiConfig);
+      const apiKey = geminiConfig.apiKey;
+      const endpoint = geminiConfig.endpoint || 'https://yunwu.ai';
+
+      const apiUrl = `${endpoint}/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
+
+      console.log(`  🚀 调用 Gemini Vision API (批量分析 ${imagesData.length} 帧)...`);
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Gemini Vision API 错误: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+
+      // 5. 解析响应
+      const analysisText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      if (!analysisText) {
+        throw new Error('Gemini Vision 返回空响应');
+      }
+
+      console.log(`  ✅ Gemini Vision 分析完成 (${analysisText.length} 字)`);
+
+      return analysisText;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`  ❌ Gemini Vision 分析失败: ${errorMsg}`);
+
+      // 降级方案：返回基础信息
+      return `关键帧分析失败: ${errorMsg}\n帧数: ${framePaths.length}\n时间范围: ${this.formatMs(timestamps[0])} - ${this.formatMs(timestamps[timestamps.length - 1])}`;
+    }
   }
 
   /**

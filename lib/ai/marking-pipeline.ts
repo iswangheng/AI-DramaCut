@@ -172,7 +172,35 @@ export class MarkingPipeline {
     // 检查是否已经提取过
     if (video.frameDir) {
       console.log(`✅ [关键帧提取] 已存在关键帧目录: ${video.frameDir}`);
-      // TODO: 读取现有关键帧
+
+      // 读取现有关键帧
+      const fs = await import('fs/promises');
+      const { readdir } = fs;
+
+      try {
+        const files = await readdir(video.frameDir);
+        const frameFiles = files.filter(f => f.startsWith('keyframe') && (f.endsWith('.jpg') || f.endsWith('.png')));
+
+        if (frameFiles.length > 0) {
+          console.log(`✅ [关键帧提取] 找到 ${frameFiles.length} 个现有关键帧，跳过重新提取`);
+
+          // 读取帧文件并排序
+          const framePaths = frameFiles
+            .sort()
+            .map(f => `${video.frameDir}/${f}`);
+
+          // 从文件名提取时间戳（如果可能）
+          const timestamps: number[] = framePaths.map(() => 0); // 简化处理，实际可以从文件名解析
+
+          return {
+            framePaths,
+            timestamps,
+            outputDir: video.frameDir,
+          };
+        }
+      } catch (error) {
+        console.warn(`⚠️  [关键帧提取] 读取现有关键帧失败: ${error}，将重新提取`);
+      }
     }
 
     // 提取关键帧（5fps，约2秒一帧）
