@@ -16,6 +16,7 @@
     "remotion:render:subtitle": "remotion render CaptionedVideo --props=./public/subtitle-props.json",
     "test:api": "tsx scripts/test-api.ts",
     "test:api:watch": "tsx watch scripts/test-api.ts",
+    "test:deepseek": "tsx scripts/test-deepseek.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",

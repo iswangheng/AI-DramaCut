@@ -448,8 +448,8 @@ export class TrainingExecutor {
       const apiKey = geminiConfig.apiKey;
       const endpoint = geminiConfig.endpoint || 'https://yunwu.ai';
 
-      // DeepSeek API（通过 yunwu.ai 代理，兼容 OpenAI 格式）
-      const apiUrl = `${endpoint}/v1/chat/completions?key=${apiKey}`;
+      // DeepSeek API（通过 yunwu.ai 代理，使用 Authorization header）
+      const apiUrl = `${endpoint}/v1/chat/completions`;
 
       const prompt = `你是短剧剪辑分析师。请分析以下对白文本，提取情绪和特征。
 
@@ -475,9 +475,10 @@ ${transcript}
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`, // 使用 Authorization header
         },
         body: JSON.stringify({
-          model: 'deepseek-v3', // 使用 DeepSeek V3
+          model: 'deepseek-chat', // 使用 deepseek-chat（更通用）
           messages: [
             {
               role: 'user',
