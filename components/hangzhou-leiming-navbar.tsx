@@ -96,6 +96,23 @@ export function HangzhouLeimingNavbar({
   // 判断当前是否在项目详情页
   const isInProjectPage = projectId && pathname.startsWith(`/hangzhou-leiming/${projectId}`);
 
+  // 项目详情页不显示导航菜单，只显示返回按钮
+  if (isInProjectPage) {
+    return (
+      <nav className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <h1 className="text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
+                杭州雷鸣
+              </h1>
+            </div>
+          </div>
+        </div>
+      </nav>
+    );
+  }
+
   // 获取当前活跃的导航项
   const getActiveItemId = () => {
     if (isInTrainingCenter) {

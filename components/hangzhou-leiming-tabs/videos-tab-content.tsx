@@ -1,0 +1,329 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  Upload,
+  Trash2,
+  Video,
+  Clock,
+  Calendar,
+  CheckCircle,
+  Loader2,
+  FileVideo,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+
+interface HLVideo {
+  id: number;
+  projectId: number;
+  filename: string;
+  filePath: string;
+  fileSize: number;
+  episodeNumber: string;
+  displayTitle: string;
+  sortOrder: number;
+  durationMs: number;
+  width: number;
+  height: number;
+  fps: number;
+  status: "uploading" | "processing" | "ready" | "error";
+  createdAt: Date;
+}
+
+interface VideosTabContentProps {
+  projectId: number;
+  projectName: string;
+  onUpdate?: () => void;
+}
+
+export function VideosTabContent({
+  projectId,
+  projectName,
+  onUpdate,
+}: VideosTabContentProps) {
+  const [videos, setVideos] = useState<HLVideo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState<HLVideo | null>(null);
+
+  useEffect(() => {
+    loadVideos();
+  }, [projectId]);
+
+  const loadVideos = async () => {
+    if (!projectId) return;
+
+    try {
+      setLoading(true);
+      const res = await fetch(
+        `/api/hangzhou-leiming/videos?projectId=${projectId}`
+      );
+      const result = await res.json();
+
+      if (result.success) {
+        setVideos(result.data || []);
+      }
+    } catch (error) {
+      console.error("加载视频失败:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpload = async (files: FileList | null) => {
+    if (!files || !projectId) return;
+
+    setUploading(true);
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("projectId", projectId.toString());
+
+        const episodeNumber = prompt(
+          `请输入「${file.name}」的集数（如：第1集）`,
+          `第${videos.length + i + 1}集`
+        );
+        if (episodeNumber) {
+          formData.append("episodeNumber", episodeNumber);
+          formData.append("displayTitle", episodeNumber);
+        }
+
+        const res = await fetch("/api/hangzhou-leiming/videos", {
+          method: "POST",
+          body: formData,
+        });
+
+        const result = await res.json();
+
+        if (!result.success) {
+          alert(`上传 ${file.name} 失败：${result.message}`);
+        }
+      }
+
+      await loadVideos();
+      onUpdate?.();
+    } catch (error) {
+      console.error("上传视频失败:", error);
+      alert("上传视频失败，请稍后重试");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteVideo = async () => {
+    if (!selectedVideo) return;
+
+    try {
+      const res = await fetch(
+        `/api/hangzhou-leiming/videos/${selectedVideo.id}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      const result = await res.json();
+
+      if (result.success) {
+        setDeleteDialogOpen(false);
+        setSelectedVideo(null);
+        await loadVideos();
+        onUpdate?.();
+      } else {
+        alert(`删除失败：${result.message}`);
+      }
+    } catch (error) {
+      console.error("删除视频失败:", error);
+      alert("删除视频失败，请稍后重试");
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (!bytes) return "-";
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " MB";
+    return (bytes / (1024 * 1024)).toFixed(2) + " GB";
+  };
+
+  const formatDuration = (ms: number) => {
+    if (!ms) return "-";
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">视频管理</h2>
+          <p className="text-muted-foreground text-sm mt-1">
+            {projectName} - 管理项目下的所有视频
+          </p>
+        </div>
+        <Button
+          onClick={() => document.getElementById('video-upload')?.click()}
+          className="cursor-pointer bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+          disabled={uploading}
+        >
+          {uploading ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              上传中...
+            </>
+          ) : (
+            <>
+              <Upload className="w-4 h-4 mr-2" />
+              上传视频
+            </>
+          )}
+        </Button>
+        <input
+          id="video-upload"
+          type="file"
+          accept="video/*"
+          multiple
+          className="hidden"
+          onChange={(e) => handleUpload(e.target.files)}
+        />
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-orange-600" />
+        </div>
+      ) : videos.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <FileVideo className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">暂无视频</h3>
+            <p className="text-muted-foreground mb-6">
+              上传视频文件开始使用杭州雷鸣
+            </p>
+            <Button
+              onClick={() => document.getElementById('video-upload-empty')?.click()}
+              className="cursor-pointer bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              上传视频
+            </Button>
+            <input
+              id="video-upload-empty"
+              type="file"
+              accept="video/*"
+              multiple
+              className="hidden"
+              onChange={(e) => handleUpload(e.target.files)}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {videos.map((video) => (
+            <Card key={video.id} className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <CardTitle className="text-lg mb-1">
+                      {video.displayTitle || video.filename}
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      {video.episodeNumber}
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="cursor-pointer hover:bg-red-50 hover:text-red-600"
+                    onClick={() => {
+                      setSelectedVideo(video);
+                      setDeleteDialogOpen(true);
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Video className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">文件：</span>
+                    <span className="truncate flex-1">{video.filename}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-sm">
+                    <Clock className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">时长：</span>
+                    <span>{formatDuration(video.durationMs)}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-sm">
+                    <FileVideo className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">大小：</span>
+                    <span>{formatFileSize(video.fileSize)}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-sm">
+                    <Calendar className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">上传时间：</span>
+                    <span>{new Date(video.createdAt).toLocaleString("zh-CN")}</span>
+                  </div>
+
+                  <div className="pt-3 border-t">
+                    <div
+                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                        video.status === "ready"
+                          ? "bg-green-100 text-green-800"
+                          : video.status === "processing"
+                          ? "bg-blue-100 text-blue-800"
+                          : video.status === "error"
+                          ? "bg-red-100 text-red-800"
+                          : "bg-gray-100 text-gray-800"
+                      }`}
+                    >
+                      {video.status === "ready" ? (
+                        <CheckCircle className="w-3 h-3" />
+                      ) : null}
+                      {
+                        {
+                          uploading: "上传中",
+                          processing: "处理中",
+                          ready: "就绪",
+                          error: "错误",
+                        }[video.status]
+                      }
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="确认删除视频"
+        description={`确定要删除视频「${selectedVideo?.displayTitle || selectedVideo?.filename}」吗？此操作将删除视频文件和相关标记数据，且无法恢复。`}
+        confirmText="确认删除"
+        cancelText="取消"
+        onConfirm={handleDeleteVideo}
+        variant="destructive"
+      />
+    </div>
+  );
+}
