@@ -151,8 +151,9 @@ export class TrainingExecutor {
       );
     }
 
-    // 提取关键帧（前后30秒，0.5fps = 60帧）
-    const windowSeconds = 30;
+    // 提取关键帧（前后15秒，1fps = 30帧）
+    // 优化：减少时间窗口，提高帧率，平衡质量和性能
+    const windowSeconds = 15;
     const startMs = Math.max(0, (marking.seconds - windowSeconds) * 1000);
     const endMs = Math.min((marking.seconds + windowSeconds) * 1000, video.durationMs);
 
@@ -160,7 +161,7 @@ export class TrainingExecutor {
 
     const keyframes = await extractKeyframes({
       videoPath: video.filePath,
-      fps: 0.5,  // 每0.5秒一帧
+      fps: 1,  // 1秒1帧（优化后）
       startTimeMs: startMs,
       endTimeMs: endMs,
       filenamePrefix: `marking_${marking.id}`,
@@ -359,13 +360,20 @@ export class TrainingExecutor {
 
       console.log(`  🚀 调用 Gemini Vision API (批量分析 ${imagesData.length} 帧)...`);
 
+      // 设置超时（2分钟）
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
+
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(requestBody),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -386,10 +394,18 @@ export class TrainingExecutor {
       return analysisText;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error(`  ❌ Gemini Vision 分析失败: ${errorMsg}`);
+
+      // 检测是否为超时错误
+      const isTimeout = errorMsg.includes('abort') || errorMsg.includes('timeout') || errorMsg.includes('AbortError');
+
+      if (isTimeout) {
+        console.error(`  ❌ Gemini Vision 分析超时（>2分钟），使用降级方案`);
+      } else {
+        console.error(`  ❌ Gemini Vision 分析失败: ${errorMsg}`);
+      }
 
       // 降级方案：返回基础信息
-      return `关键帧分析失败: ${errorMsg}\n帧数: ${framePaths.length}\n时间范围: ${this.formatMs(timestamps[0])} - ${this.formatMs(timestamps[timestamps.length - 1])}`;
+      return `关键帧分析${isTimeout ? '超时' : '失败'}: ${errorMsg}\n帧数: ${framePaths.length}\n时间范围: ${this.formatMs(timestamps[0])} - ${this.formatMs(timestamps[timestamps.length - 1])}`;
     }
   }
 
